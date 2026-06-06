@@ -22,24 +22,24 @@ const i18n = {
         txtCredit: "CREDIT", txtDebit: "DEBIT", txtLeg: "Leg", fxClearing: "FX Clearing"
     },
     es: {
-        sbTitle: "Terminal de Pagos", sbDesc: "Ejecuta transferencias entre divisas a través del motor de compensación FX.",
-        langTitle: "Idioma", lblSenderReceiver: "Emisor y Receptor", lblSender: "Emisor", lblReceiver: "Receptor",
-        lblPaymentParams: "Parámetros de Pago", lblAmount: "Monto", lblFxRate: "Tasa de Cambio FX", lblIdempotency: "Idempotencia",
-        lblAutoGenerate: "Generar clave automática", btnExecute: "Ejecutar Pago", btnReset: "Restablecer Base de Datos",
-        mainTitle: "Motor de Libro Mayor", mainSubtitle: "Libro de pagos de doble entrada · Compensación cruzada de divisas FX · Monitoreo de invariantes",
-        metDebits: "TOTAL DÉBITOS", metCredits: "TOTAL CRÉDITOS", metTxns: "TRANSACCIONES", metEntries: "ASIENTOS",
-        flowTitle: "Flujo de Pago", flowDesc: "Ruta de liquidación cruzada de divisas a través de la Cuenta Corporativa FX.",
-        accTitle: "Cuentas", accDesc: "Cuentas de Compensación FX resaltadas sutilmente.",
+        sbTitle: "Terminal de Pagos", sbDesc: "Ejecución de transferencias multidivisa mediante el motor de compensación.",
+        langTitle: "Idioma", lblSenderReceiver: "Origen y Destino", lblSender: "Cuenta de Origen", lblReceiver: "Cuenta de Destino",
+        lblPaymentParams: "Detalles de la Operación", lblAmount: "Monto", lblFxRate: "Tipo de Cambio", lblIdempotency: "Idempotencia",
+        lblAutoGenerate: "Generar clave automáticamente", btnExecute: "Procesar Transferencia", btnReset: "Reiniciar Entorno",
+        mainTitle: "Motor Contable", mainSubtitle: "Libro mayor de partida doble · Compensación cambiaria · Monitoreo de invariantes",
+        metDebits: "CARGOS TOTALES", metCredits: "ABONOS TOTALES", metTxns: "OPERACIONES", metEntries: "APUNTES CONTABLES",
+        flowTitle: "Flujo de Fondos", flowDesc: "Ruta de liquidación multidivisa a través de las cuentas de compensación.",
+        accTitle: "Cuentas", accDesc: "Cuentas de compensación resaltadas.",
         thId: "ID", thAccount: "CUENTA", thType: "TIPO", thCurrency: "DIVISA", thBalance: "SALDO",
-        tabJournal: "Asientos de Diario", tabLegs: "Líneas de Libro Mayor", txnsTitle: "Transacciones",
-        thTimestamp: "FECHA Y HORA", thIdemKey: "CLAVE DE IDEMPOTENCIA", thDesc: "DESCRIPCIÓN", thLegs: "LÍNEAS",
-        entriesTitle: "Líneas de Asiento", entriesDesc: "DÉBITO en turquesa · CRÉDITO en rojo.", thTxn: "TXN", thDirection: "DIRECCIÓN", thAmount: "MONTO",
-        balPrefix: "Saldo: ", rcvPrefix: "Receptor recibe ", invBalanced: "PERFECTAMENTE BALANCEADO (0.00) ─ Σ Débitos == Σ Créditos",
-        invImbalance: "DESBALANCE DETECTADO ─ Neto: ", invLabel: "Invariante del Sistema", userCount: " usuario", usersCount: " usuarios",
-        accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos en esta sesión: ",
-        toastSuccess: "Éxito", toastError: "Error", toastReset: "Restablecido", msgDbReset: "Base de datos restablecida al estado inicial.",
-        errBackend: "No se pudo conectar al motor backend.", errPayment: "Error de red al ejecutar el pago.", errReset: "No se pudo restablecer la base de datos.",
-        txtCredit: "CRÉDITO", txtDebit: "DÉBITO", txtLeg: "Línea", fxClearing: "Compensación FX"
+        tabJournal: "Registro de Operaciones", tabLegs: "Libro Mayor", txnsTitle: "Operaciones",
+        thTimestamp: "FECHA", thIdemKey: "CLAVE DE IDEMPOTENCIA", thDesc: "CONCEPTO", thLegs: "APUNTES",
+        entriesTitle: "Apuntes Contables", entriesDesc: "CARGO en turquesa · ABONO en rojo.", thTxn: "OP", thDirection: "NATURALEZA", thAmount: "IMPORTE",
+        balPrefix: "Saldo: ", rcvPrefix: "Destino recibe ", invBalanced: "BALANCE PERFECTO (0.00) ─ Σ Cargos == Σ Abonos",
+        invImbalance: "DESCUADRE DETECTADO ─ Neto: ", invLabel: "Invariante del Sistema", userCount: " usuario", usersCount: " usuarios",
+        accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos procesados en esta sesión: ",
+        toastSuccess: "Éxito", toastError: "Error", toastReset: "Reiniciado", msgDbReset: "Entorno restaurado a su estado inicial.",
+        errBackend: "Sin conexión al motor contable.", errPayment: "Error de red procesando la transferencia.", errReset: "Error al reiniciar el entorno.",
+        txtCredit: "ABONO", txtDebit: "CARGO", txtLeg: "Apunte", fxClearing: "Compensación"
     }
 };
 
@@ -223,6 +223,36 @@ function render() {
     els.metricEntriesSub.textContent = `(${state.metrics.account_count}${state.metrics.account_count === 1 ? t('accountCount') : t('accountsCount')})`;
     els.footerPayments.textContent = `${t('footerPayments')}${state.session.pay_n}`;
 
+    // Translators for dynamic backend data
+    const tDyn = (val) => {
+        if (currentLang !== 'es' || !val) return val;
+        let translated = String(val);
+        const dict = {
+            'CORPORATE_FX_CLEARING': 'COMPENSACIÓN',
+            'USER': 'USUARIO',
+            'CREDIT': 'ABONO',
+            'DEBIT': 'CARGO',
+            'Cross-currency transfer': 'Transferencia multidivisa',
+            'Same-currency transfer': 'Transferencia local',
+            'Initial funding: Alice receives': 'Fondeo inicial: Alicia recibe',
+            'Treasury funding: FX Clearing': 'Fondeo de Tesorería: Compensación',
+            'Treasury capitalisation: FX Clearing': 'Capitalización de Tesorería: Compensación',
+            'Alice (User 1)': 'Alicia (Usuario 1)',
+            'Bob (User 2)': 'Roberto (Usuario 2)',
+            'from Alice to Bob': 'de Alicia a Roberto',
+            'from Bob to Alice': 'de Roberto a Alicia',
+            'Alice': 'Alicia',
+            'Bob': 'Roberto',
+            'pool': ' '
+        };
+        for (let key in dict) {
+            if (translated.includes(key)) {
+                translated = translated.split(key).join(dict[key]);
+            }
+        }
+        return translated.trim();
+    };
+
     // Selects
     const prevSender = els.sender.value;
     const prevReceiver = els.receiver.value;
@@ -233,7 +263,7 @@ function render() {
     state.user_accounts.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.id;
-        opt.textContent = `${a.name} (${a.currency})`;
+        opt.textContent = `${tDyn(a.name)} (${a.currency})`;
         
         els.sender.appendChild(opt.cloneNode(true));
         els.receiver.appendChild(opt);
@@ -248,8 +278,8 @@ function render() {
     els.tableAccounts.innerHTML = state.tables.accounts.map(r => `
         <tr class="${r.type === 'CORPORATE_FX_CLEARING' ? 'hl-fx' : ''}">
             <td>${r.id}</td>
-            <td>${r.name}</td>
-            <td>${r.type}</td>
+            <td>${tDyn(r.name)}</td>
+            <td>${tDyn(r.type)}</td>
             <td>${r.currency}</td>
             <td>${r.currency} ${r.balance_display}</td>
         </tr>
@@ -260,9 +290,9 @@ function render() {
         <tr>
             <td>${r.id}</td>
             <td>${r.timestamp.split('.')[0]}</td>
-            <td style="font-family: monospace;">${r.idempotency_key}</td>
-            <td>${r.description}</td>
-            <td>${r.legs}</td>
+            <td class="mono">${r.idempotency_key}</td>
+            <td>${tDyn(r.description)}</td>
+            <td>${r.legs_count}</td>
         </tr>
     `).join('');
 
@@ -274,9 +304,9 @@ function render() {
             <tr class="${isFx ? 'hl-fx' : ''}">
                 <td>${r.id}</td>
                 <td>${r.txn_id}</td>
-                <td>${r.account_name}</td>
+                <td>${tDyn(r.account_name)}</td>
                 <td>${r.currency}</td>
-                <td class="${isDebit ? 'td-debit' : 'td-credit'}">${r.direction}</td>
+                <td class="${isDebit ? 'td-debit' : 'td-credit'}">${tDyn(r.direction)}</td>
                 <td class="${isDebit ? 'td-debit' : 'td-credit'}">${r.currency} ${r.amount_display}</td>
             </tr>
         `;
