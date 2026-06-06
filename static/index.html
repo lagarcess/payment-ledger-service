@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ledger Engine — Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Terminal -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Payment Terminal</h2>
+                <p>Execute cross-currency transfers through the FX clearing engine.</p>
+            </div>
+
+            <div class="form-section">
+                <label class="section-label">Sender & Receiver</label>
+                
+                <div class="form-group">
+                    <label for="sender">Sender</label>
+                    <select id="sender" class="form-control"></select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="receiver">Receiver</label>
+                    <select id="receiver" class="form-control"></select>
+                </div>
+
+                <div id="sender-balance" class="helper-text">Balance: --</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="form-section">
+                <label class="section-label">Payment Parameters</label>
+                
+                <div class="form-group">
+                    <label for="amount" id="label-amount">Amount</label>
+                    <input type="number" id="amount" class="form-control" value="50.00" step="0.01" min="0.01">
+                </div>
+
+                <div class="form-group">
+                    <label for="fx-rate">FX Rate</label>
+                    <div class="range-container">
+                        <input type="range" id="fx-rate" class="form-range" min="0.50" max="1.50" step="0.01" value="0.92">
+                        <span id="fx-rate-val" class="range-val">0.92</span>
+                    </div>
+                </div>
+
+                <div id="fx-calculation" class="helper-text">Receiver gets -- · --</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="form-section">
+                <label class="section-label">Idempotency</label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="auto-key" checked>
+                    <label for="auto-key">Auto-generate key</label>
+                </div>
+                <div class="code-box" id="idem-key-display">PAY-XXXX</div>
+                <input type="text" id="idem-key-input" class="form-control" value="PAY-CUSTOM-01" style="display: none; margin-top: 8px;">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="sidebar-actions">
+                <button id="btn-execute" class="btn btn-primary">Execute Payment</button>
+                <button id="btn-reset" class="btn btn-secondary">Reset Database</button>
+            </div>
+            
+            <div id="toast-container" class="toast-container"></div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <h1 class="display-title">Ledger Engine</h1>
+                <p class="lead-text">Double-entry payment ledger · Cross-currency FX clearing · Real-time invariant monitoring</p>
+            </header>
+
+            <div id="invariant-card" class="invariant-card skeleton"></div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">TOTAL DEBITS</div>
+                    <div class="metric-value-group">
+                        <div id="metric-debits" class="metric-value skeleton-text">0.00</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">TOTAL CREDITS</div>
+                    <div class="metric-value-group">
+                        <div id="metric-credits" class="metric-value skeleton-text">0.00</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">TRANSACTIONS</div>
+                    <div class="metric-value-group">
+                        <div id="metric-txns" class="metric-value skeleton-text">0</div>
+                        <div id="metric-txns-sub" class="metric-sub skeleton-text">user</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">ENTRIES</div>
+                    <div class="metric-value-group">
+                        <div id="metric-entries" class="metric-value skeleton-text"></div>
+                        <div id="metric-entries-sub" class="metric-sub skeleton-text"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header" style="margin-top: 40px;">
+                <h2>Payment Flow</h2>
+                <p>Cross-currency settlement path through the Corporate FX Clearing Account.</p>
+            </div>
+            <div class="flow-card skeleton" id="flow-card"></div>
+
+            <div class="section-header" style="margin-top: 40px;">
+                <h2>Accounts <span class="badge" id="badge-accounts">0</span></h2>
+                <p>FX Clearing rows highlighted with subtle tint.</p>
+            </div>
+            <div class="table-container">
+                <table class="data-table" id="table-accounts">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>ACCOUNT</th>
+                            <th>TYPE</th>
+                            <th>CURRENCY</th>
+                            <th>BALANCE</th>
+                        </tr>
+                    </thead>
+                    <tbody><!-- Injected via JS --></tbody>
+                </table>
+            </div>
+
+            <div class="tabs-container">
+                <div class="tabs-list">
+                    <button class="tab-btn active" data-target="tab-txns">Journal Entries</button>
+                    <button class="tab-btn" data-target="tab-entries">Ledger Legs</button>
+                </div>
+
+                <div id="tab-txns" class="tab-content active">
+                    <div class="section-header">
+                        <h2>Transactions <span class="badge" id="badge-txns">0</span></h2>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="table-txns">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>TIMESTAMP</th>
+                                    <th>IDEMPOTENCY KEY</th>
+                                    <th>DESCRIPTION</th>
+                                    <th>LEGS</th>
+                                </tr>
+                            </thead>
+                            <tbody><!-- Injected via JS --></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="tab-entries" class="tab-content">
+                    <div class="section-header">
+                        <h2>Entry Legs <span class="badge" id="badge-entries">0</span></h2>
+                        <p>DEBIT in teal · CREDIT in red.</p>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table class="data-table" id="table-entries">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>TXN</th>
+                                    <th>ACCOUNT</th>
+                                    <th>CURRENCY</th>
+                                    <th>DIRECTION</th>
+                                    <th>AMOUNT</th>
+                                </tr>
+                            </thead>
+                            <tbody><!-- Injected via JS --></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="footer">
+                Sandbox Ledger Engine · sqlite · <span id="footer-payments">Payments this session: 0</span>
+            </footer>
+        </main>
+    </div>
+
+    <!-- SVG Templates hidden -->
+    <svg style="display: none;">
+        <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </symbol>
+        <symbol id="icon-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </symbol>
+    </svg>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
