@@ -18,7 +18,8 @@ const i18n = {
         invImbalance: "IMBALANCE DETECTED ─ Net: ", invLabel: "System Invariant", userCount: " user", usersCount: " users",
         accountCount: " account", accountsCount: " accounts", footerPayments: "Payments this session: ",
         toastSuccess: "Success", toastError: "Error", toastReset: "Reset", msgDbReset: "Database reset to seed state.",
-        errBackend: "Failed to connect to backend engine.", errPayment: "Network error executing payment.", errReset: "Failed to reset database."
+        errBackend: "Failed to connect to backend engine.", errPayment: "Network error executing payment.", errReset: "Failed to reset database.",
+        txtCredit: "CREDIT", txtDebit: "DEBIT", txtLeg: "Leg", fxClearing: "FX Clearing"
     },
     es: {
         sbTitle: "Terminal de Pagos", sbDesc: "Ejecuta transferencias entre divisas a través del motor de compensación FX.",
@@ -37,7 +38,8 @@ const i18n = {
         invImbalance: "DESBALANCE DETECTADO ─ Neto: ", invLabel: "Invariante del Sistema", userCount: " usuario", usersCount: " usuarios",
         accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos en esta sesión: ",
         toastSuccess: "Éxito", toastError: "Error", toastReset: "Restablecido", msgDbReset: "Base de datos restablecida al estado inicial.",
-        errBackend: "No se pudo conectar al motor backend.", errPayment: "Error de red al ejecutar el pago.", errReset: "No se pudo restablecer la base de datos."
+        errBackend: "No se pudo conectar al motor backend.", errPayment: "Error de red al ejecutar el pago.", errReset: "No se pudo restablecer la base de datos.",
+        txtCredit: "CRÉDITO", txtDebit: "DÉBITO", txtLeg: "Línea", fxClearing: "Compensación FX"
     }
 };
 
@@ -307,11 +309,15 @@ function updateFormState() {
     els.btnExecute.disabled = senderId === receiverId || amt <= 0;
 
     // Update Flow Diagram
-    els.flowCard.innerHTML = `
-<span class="fc-brand">${sender.name}</span>  <span>──</span>  <span class="fc-credit">CREDIT</span>  <span>──▶</span>  <span class="fc-node">FX Clearing (${sender.currency})</span>  <span>──</span>  <span class="fc-debit">DEBIT</span>  <span>──▶</span>  <span class="fc-node">FX Clearing (${receiver.currency})</span>  <span>──</span>  <span class="fc-credit">CREDIT</span>  <span>──▶</span>  <span class="fc-debit">${receiver.name}</span>
+    const formatName = (name) => currentLang === 'es' ? name.replace('User', 'Usuario') : name;
+    const senderName = formatName(sender.name);
+    const receiverName = formatName(receiver.name);
 
-<span>Leg 1</span>  <span class="fc-credit">CREDIT</span> ${sender.name} <span>${sender.currency} ${formatNum(amt)}</span>   →   <span class="fc-debit">DEBIT</span> FX Clearing (${sender.currency}) <span>${sender.currency} ${formatNum(amt)}</span>
-<span>Leg 2</span>  <span class="fc-credit">CREDIT</span> FX Clearing (${receiver.currency}) <span>${receiver.currency} ${formatNum(recvAmt)}</span>   →   <span class="fc-debit">DEBIT</span> ${receiver.name} <span>${receiver.currency} ${formatNum(recvAmt)}</span>
+    els.flowCard.innerHTML = `
+<span class="fc-brand">${senderName}</span>  <span>──</span>  <span class="fc-credit">${t('txtCredit')}</span>  <span>──▶</span>  <span class="fc-node">${t('fxClearing')} (${sender.currency})</span>  <span>──</span>  <span class="fc-debit">${t('txtDebit')}</span>  <span>──▶</span>  <span class="fc-node">${t('fxClearing')} (${receiver.currency})</span>  <span>──</span>  <span class="fc-credit">${t('txtCredit')}</span>  <span>──▶</span>  <span class="fc-debit">${receiverName}</span>
+
+<span>${t('txtLeg')} 1</span>  <span class="fc-credit">${t('txtCredit')}</span> ${senderName} <span>${sender.currency} ${formatNum(amt)}</span>   →   <span class="fc-debit">${t('txtDebit')}</span> ${t('fxClearing')} (${sender.currency}) <span>${sender.currency} ${formatNum(amt)}</span>
+<span>${t('txtLeg')} 2</span>  <span class="fc-credit">${t('txtCredit')}</span> ${t('fxClearing')} (${receiver.currency}) <span>${receiver.currency} ${formatNum(recvAmt)}</span>   →   <span class="fc-debit">${t('txtDebit')}</span> ${receiverName} <span>${receiver.currency} ${formatNum(recvAmt)}</span>
     `.trim();
 }
 
