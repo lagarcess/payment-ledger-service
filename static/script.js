@@ -19,7 +19,8 @@ const i18n = {
         accountCount: " account", accountsCount: " accounts", footerPayments: "Payments this session: ",
         toastSuccess: "Success", toastError: "Error", toastReset: "Reset", msgDbReset: "Database reset to seed state.",
         errBackend: "Failed to connect to backend engine.", errPayment: "Network error executing payment.", errReset: "Failed to reset database.",
-        txtCredit: "CREDIT", txtDebit: "DEBIT", txtLeg: "Leg", fxClearing: "FX Clearing"
+        txtCredit: "CREDIT", txtDebit: "DEBIT", txtLeg: "Leg", fxClearing: "FX Clearing",
+        appTitle: "Appearance", appSystem: "System", appLight: "Light", appDark: "Dark"
     },
     es: {
         sbTitle: "Terminal de Pagos", sbDesc: "Ejecución de transferencias multidivisa mediante el motor de compensación.",
@@ -39,11 +40,13 @@ const i18n = {
         accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos procesados en esta sesión: ",
         toastSuccess: "Éxito", toastError: "Error", toastReset: "Reiniciado", msgDbReset: "Entorno restaurado a su estado inicial.",
         errBackend: "Sin conexión al motor contable.", errPayment: "Error de red procesando la transferencia.", errReset: "Error al reiniciar el entorno.",
-        txtCredit: "ABONO", txtDebit: "CARGO", txtLeg: "Apunte", fxClearing: "Compensación"
+        txtCredit: "ABONO", txtDebit: "CARGO", txtLeg: "Apunte", fxClearing: "Compensación",
+        appTitle: "Apariencia", appSystem: "Sistema", appLight: "Claro", appDark: "Oscuro"
     }
 };
 
 let currentLang = localStorage.getItem('revLang') || 'en';
+let currentTheme = localStorage.getItem('revTheme') || 'system';
 
 function t(key) {
     return i18n[currentLang][key] || key;
@@ -93,7 +96,8 @@ const els = {
     
     btnSettings: document.getElementById('btn-settings'),
     settingsPopover: document.getElementById('settings-popover'),
-    langOptions: document.querySelectorAll('.lang-option'),
+    langOptions: document.querySelectorAll('.menu-list-item'),
+    themeOptions: document.querySelectorAll('.segmented-btn'),
     
     tabBtns: document.querySelectorAll('.tab-btn'),
     tabContents: document.querySelectorAll('.tab-content')
@@ -108,6 +112,7 @@ let currentReceiverId = null;
 async function init() {
     setupEventListeners();
     setLanguage(currentLang, false);
+    setTheme(currentTheme);
     await fetchState();
     generateIdemKey();
 }
@@ -159,7 +164,12 @@ function setupEventListeners() {
     els.langOptions.forEach(btn => {
         btn.addEventListener('click', () => {
             setLanguage(btn.dataset.lang);
-            els.settingsPopover.classList.remove('active');
+        });
+    });
+
+    els.themeOptions.forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTheme(btn.dataset.themeVal);
         });
     });
 
@@ -180,6 +190,17 @@ function setLanguage(lang, reRender = true) {
     if (reRender && state) {
         render();
     }
+}
+
+function setTheme(theme) {
+    currentTheme = theme;
+    localStorage.setItem('revTheme', theme);
+    
+    document.documentElement.setAttribute('data-theme', theme);
+    
+    els.themeOptions.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.themeVal === theme);
+    });
 }
 
 // Data Fetching

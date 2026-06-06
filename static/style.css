@@ -1,5 +1,5 @@
 /* ── Light Mode Tokens (Default) ── */
-:root {
+:root, [data-theme="light"] {
     --rev-canvas: #ffffff;
     --rev-surface: #f4f4f4;
     --rev-border: #e2e2e7;
@@ -16,8 +16,24 @@
 }
 
 /* ── Dark Mode Tokens ── */
+[data-theme="dark"] {
+    --rev-canvas: #000000;
+    --rev-surface: #16181a;
+    --rev-border: rgba(255, 255, 255, 0.12);
+    --rev-text: #ffffff;
+    --rev-text-mute: rgba(255, 255, 255, 0.55);
+    --rev-primary: #4f55f1;
+    --rev-primary-hover: #6368f3;
+    --rev-success: #00a87e;
+    --rev-success-bg: rgba(0, 168, 126, 0.15);
+    --rev-danger: #e23b4a;
+    --rev-danger-bg: rgba(226, 59, 74, 0.20);
+    --rev-sidebar-border: rgba(255, 255, 255, 0.08);
+    --rev-input-bg: #0a0a0a;
+}
+
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
         --rev-canvas: #000000;
         --rev-surface: #16181a;
         --rev-border: rgba(255, 255, 255, 0.12);
@@ -549,7 +565,7 @@ body {
     padding: 16px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     z-index: 100;
-    width: 220px;
+    width: 280px;
     display: none;
 }
 .settings-popover.active {
@@ -559,35 +575,84 @@ body {
 .settings-popover-title {
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
     color: var(--rev-text-mute);
-    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
 }
 
-.lang-toggle-group {
+.popover-divider {
+    height: 1px;
+    background-color: var(--rev-border);
+    margin: 16px 0;
+}
+
+/* Minimalist Menu List */
+.menu-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
-.lang-option {
+.menu-list-item {
     background: transparent;
     border: none;
-    text-align: left;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-family: 'Inter', sans-serif;
     color: var(--rev-text-mute);
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.1s, color 0.1s;
 }
-.lang-option:hover {
-    background: var(--rev-surface);
-}
-.lang-option.active {
+.menu-list-item:hover {
     background: var(--rev-surface);
     color: var(--rev-text);
+}
+.menu-list-item.active {
+    color: var(--rev-primary);
+}
+.menu-list-item .check-icon {
+    opacity: 0;
+    color: var(--rev-primary);
+    transform: scale(0.8);
+    transition: all 0.2s;
+}
+.menu-list-item.active .check-icon {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Horizontal Segmented Control */
+.segmented-control {
+    display: flex;
+    background: var(--rev-surface);
+    border: 1px solid var(--rev-border);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+}
+.segmented-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--rev-text-mute);
+    padding: 6px 0;
+    font-size: 12px;
     font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    text-align: center;
+}
+.segmented-btn:hover {
+    color: var(--rev-text);
+}
+.segmented-btn.active {
+    background: var(--rev-canvas);
+    color: var(--rev-text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
