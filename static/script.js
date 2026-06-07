@@ -11,6 +11,7 @@ function getDefaultApiOrigin() {
     if (LOCAL_HOSTS.has(hostname)) {
         return port === '8000' ? origin : 'http://127.0.0.1:8000';
     }
+    if (hostname.endsWith('.onrender.com')) return origin;
     return DEFAULT_REMOTE_API_ORIGIN;
 }
 
