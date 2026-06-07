@@ -136,7 +136,7 @@ On localhost, the frontend defaults API calls to `http://127.0.0.1:8000`. On
 GitHub Pages, it defaults to the Render backend origin:
 
 ```text
-https://ledger-api.onrender.com
+https://ledger-api-oy0a.onrender.com
 ```
 
 Open the gear menu to inspect or override the API URL. The panel shows the
@@ -146,7 +146,7 @@ cold-start timeout; the **Warm** control calls `/health` as a manual retry. You
 can also open the Pages frontend with an explicit backend override:
 
 ```text
-https://lagarcess.github.io/payment-ledger-service/?api=https://ledger-api.onrender.com
+https://lagarcess.github.io/payment-ledger-service/?api=https://ledger-api-oy0a.onrender.com
 ```
 
 ### Backend Controls From The Gear Menu
@@ -156,7 +156,7 @@ use the **Backend** section to connect the static UI to a running API:
 
 | Control | What it does |
 |---------|--------------|
-| `API URL` | Backend origin used by the dashboard, such as `https://ledger-api.onrender.com` or `http://127.0.0.1:8000`. Do not include `/api/state`; the frontend adds API paths automatically. |
+| `API URL` | Backend origin used by the dashboard, such as `https://ledger-api-oy0a.onrender.com` or `http://127.0.0.1:8000`. Do not include `/api/state`; the frontend adds API paths automatically. |
 | `Save` | Stores the API URL in browser local storage so refreshes keep using the same backend. |
 | `Default` | Restores the automatic default: localhost during local development, Render on GitHub Pages. |
 | `Warm` | Calls `{API URL}/health` to wake or check the backend, then refreshes ledger state. This is useful for Render free-tier cold starts. |

@@ -1,5 +1,5 @@
 const API_ORIGIN_STORAGE_KEY = 'revApiOrigin';
-const DEFAULT_REMOTE_API_ORIGIN = 'https://ledger-api.onrender.com';
+const DEFAULT_REMOTE_API_ORIGIN = 'https://ledger-api-oy0a.onrender.com';
 const STATE_FETCH_TIMEOUT_LOCAL_MS = 60000;
 const STATE_FETCH_TIMEOUT_REMOTE_MS = 90000;
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
