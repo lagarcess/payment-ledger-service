@@ -59,6 +59,13 @@ You MUST NOT:
 - Add `cascade="all, delete-orphan"` to any relationship on `Transaction` or `Account`.
 - Remove the `version_id` (OCC) column from `Account`.
 
+### 5. NEVER Break the Concurrency Engine
+You MUST NOT:
+- Remove the `locking_strategy` parameter from payment execution flows.
+- Mix concurrency models (e.g., do not attempt to use `flag_modified` inside a `PESSIMISTIC` lock path).
+- Apply `.with_for_update()` to aggregate sum queries. It must only be applied directly to the `Account` row fetch.
+- Remove the `BEGIN IMMEDIATE` SQLite workaround for pessimistic locking.
+
 ---
 
 ## Core Principles & Invariants
@@ -79,10 +86,12 @@ When modifying this codebase, you MUST adhere to the following fintech and accou
    - Every request uses a unique `idempotency_key` enforced by a database constraint to prevent duplicate transactions.
 6. **Overdraft Protection:** 
    - End-user accounts cannot drop below a zero balance. Always check for sufficient funds and raise an `InsufficientFundsError` if necessary.
-7. **Pessimistic Row Locking:**
-   - Lock `Account` rows with `.with_for_update()` *before* computing aggregate balances. Never apply `FOR UPDATE` to aggregate queries.
-8. **Optimistic Concurrency Control:**
-   - `Account.version_id` is auto-incremented on every update. Concurrent modifications raise `StaleDataError`.
+7. **Toggleable Concurrency Control:**
+   - The system supports both Pessimistic and Optimistic Concurrency Control (OCC) selectable at runtime. Future features must respect and support this toggleable architecture.
+8. **Pessimistic Row Locking:**
+   - Lock `Account` rows with `.with_for_update()` *before* computing aggregate balances. SQLite environments must prefix this with a `BEGIN IMMEDIATE` session execution to emulate row-level blocking.
+9. **Optimistic Concurrency Control (OCC):**
+   - Because appending `Entry` rows does not natively bump the parent `Account` version, you must use SQLAlchemy's `flag_modified(account, "name")` to force the version increment at commit time.
 
 ---
 
