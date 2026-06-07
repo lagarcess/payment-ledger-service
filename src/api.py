@@ -20,9 +20,11 @@ from .models import (
     Base,
 )
 from .ledger import (
+    ConcurrencyConflictError,
     DuplicateTransactionError,
     InsufficientFundsError,
     LedgerEngine,
+    TransactionNotFoundError,
     bootstrap_database,
 )
 
@@ -92,6 +94,7 @@ class PaymentRequest(BaseModel):
     send_dollars: float
     fx_rate: float
     idempotency_key: Optional[str] = None
+    locking_strategy: Optional[str] = "PESSIMISTIC"
 
 class ResetResponse(BaseModel):
     status: str
@@ -239,6 +242,7 @@ def execute_payment(req: PaymentRequest):
             idempotency_key=idem_key,
             fx_clearing_usd_id=ids["fx_usd"],
             fx_clearing_eur_id=ids["fx_eur"],
+            locking_strategy=req.locking_strategy or "PESSIMISTIC",
         )
         
         app_state["pay_n"] = app_state.get("pay_n", 0) + 1
@@ -246,6 +250,7 @@ def execute_payment(req: PaymentRequest):
             "status": "success",
             "transaction_id": txn.id,
             "idempotency_key": idem_key,
+            "locking_strategy": req.locking_strategy or "PESSIMISTIC",
             "message": f"Transaction #{txn.id} committed successfully."
         }
         
@@ -253,8 +258,35 @@ def execute_payment(req: PaymentRequest):
         raise HTTPException(status_code=409, detail=f"Idempotency Rejection: {str(e)}")
     except InsufficientFundsError as e:
         raise HTTPException(status_code=400, detail=f"Overdraft Prevention: {str(e)}")
+    except ConcurrencyConflictError as e:
+        raise HTTPException(status_code=409, detail=f"Concurrency Conflict (OCC): {str(e)}")
     except Exception as e:
         logging.exception("Payment execution failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reverse/{transaction_id}")
+def reverse_transaction(transaction_id: int):
+    """Create a compensating reversal for an existing transaction."""
+    ensure_bootstrapped()
+    
+    try:
+        rev_txn = ledger.reverse_transaction(transaction_id)
+        return {
+            "status": "success",
+            "transaction_id": rev_txn.id,
+            "original_transaction_id": transaction_id,
+            "message": f"Reversal transaction #{rev_txn.id} committed. "
+                       f"Original transaction #{transaction_id} has been offset."
+        }
+    except TransactionNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except DuplicateTransactionError as e:
+        raise HTTPException(status_code=409, detail=f"Already Reversed: {str(e)}")
+    except InsufficientFundsError as e:
+        raise HTTPException(status_code=400, detail=f"Reversal Overdraft: {str(e)}")
+    except Exception as e:
+        logging.exception("Reversal failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 

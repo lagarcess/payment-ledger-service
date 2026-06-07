@@ -34,11 +34,13 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import (
     Session,
     relationship,
     sessionmaker,
 )
+from sqlalchemy.orm.attributes import flag_modified
 
 from .models import (
     DB_PATH,
@@ -80,6 +82,16 @@ class InsufficientFundsError(Exception):
 
 class InvariantViolationError(Exception):
     """Raised when the global debit/credit balance is non-zero."""
+    pass
+
+
+class ConcurrencyConflictError(Exception):
+    """Raised when OCC detects a stale version_id (concurrent modification)."""
+    pass
+
+
+class TransactionNotFoundError(Exception):
+    """Raised when a referenced transaction does not exist."""
     pass
 
 
@@ -147,6 +159,7 @@ class LedgerEngine:
         *,
         fx_clearing_usd_id: int,
         fx_clearing_eur_id: int,
+        locking_strategy: str = "PESSIMISTIC",
     ) -> Transaction:
         """
         Execute a cross-currency payment through the FX Clearing Account.
@@ -154,22 +167,30 @@ class LedgerEngine:
         The entire operation is wrapped in a single database transaction.
         Either all four entry legs commit atomically, or none do.
 
-        Pessimistic Locking
-        -------------------
-        Before computing balances, the ``Account`` rows for the sender and
-        the FX clearing (EUR) account are locked with ``FOR UPDATE`` to
-        prevent concurrent double-spends.  This is the correct approach —
-        locking the Account row rather than the aggregate query.
+        Locking Strategies
+        ------------------
+        ``PESSIMISTIC`` (default):
+            Acquires ``FOR UPDATE`` locks on Account rows *before*
+            computing balances.  Concurrent transactions block until
+            the lock holder commits, then read updated balances.
+
+        ``OCC`` (Optimistic Concurrency Control):
+            Loads Account rows without locks.  After inserting entries,
+            "touches" the Account rows via ``flag_modified()`` to force
+            a ``version_id`` increment.  If another transaction already
+            committed a version bump, SQLAlchemy raises ``StaleDataError``
+            at flush time.
 
         Parameters
         ----------
-        sender_id         : int   – Account ID of the payer (e.g. USD user).
-        receiver_id       : int   – Account ID of the payee (e.g. EUR user).
+        sender_id         : int   – Account ID of the payer.
+        receiver_id       : int   – Account ID of the payee.
         send_amount       : int   – Amount in sender's minor currency units.
-        fx_rate           : float – Conversion multiplier (recv_minor / send_minor).
+        fx_rate           : float – Conversion multiplier.
         idempotency_key   : str   – Unique caller-supplied dedup token.
         fx_clearing_usd_id: int   – FX Clearing account ID for sender currency.
         fx_clearing_eur_id: int   – FX Clearing account ID for receiver currency.
+        locking_strategy  : str   – "PESSIMISTIC" or "OCC".
 
         Returns
         -------
@@ -177,25 +198,52 @@ class LedgerEngine:
 
         Raises
         ------
-        DuplicateTransactionError – If the idempotency_key already exists.
-        InsufficientFundsError    – If sender cannot cover the send_amount.
-
-        Detailed Flow
-        -------------
-        1.  Check idempotency_key against existing transactions.
-        2.  Lock Account rows (pessimistic locking).
-        3.  Compute the received amount:  recv_amount = round(send_amount × fx_rate)
-        4.  Verify sender has sufficient funds.
-        5.  Create journal header (Transaction).
-        6.  Insert four Entry legs:
-              Leg 1a — CREDIT sender       (send_amount in sender currency)
-              Leg 1b — DEBIT  FX Clearing   (send_amount in sender currency)
-              Leg 2a — CREDIT FX Clearing   (recv_amount in receiver currency)
-              Leg 2b — DEBIT  receiver      (recv_amount in receiver currency)
-        7.  Commit.
+        DuplicateTransactionError  – idempotency_key already consumed.
+        InsufficientFundsError     – Sender cannot cover the send_amount.
+        ConcurrencyConflictError   – OCC version conflict detected.
         """
+        try:
+            return self._execute_payment_inner(
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+                send_amount=send_amount,
+                fx_rate=fx_rate,
+                idempotency_key=idempotency_key,
+                fx_clearing_usd_id=fx_clearing_usd_id,
+                fx_clearing_eur_id=fx_clearing_eur_id,
+                locking_strategy=locking_strategy,
+            )
+        except StaleDataError:
+            raise ConcurrencyConflictError(
+                f"OCC conflict: Account version_id was modified by a "
+                f"concurrent transaction.  Your payment was rejected "
+                f"to prevent a double-spend.  Retry with a fresh read."
+            )
+
+    def _execute_payment_inner(
+        self,
+        sender_id: int,
+        receiver_id: int,
+        send_amount: int,
+        fx_rate: float,
+        idempotency_key: str,
+        *,
+        fx_clearing_usd_id: int,
+        fx_clearing_eur_id: int,
+        locking_strategy: str = "PESSIMISTIC",
+    ) -> Transaction:
+        """Inner implementation — separated so StaleDataError propagates."""
         with self._session_factory() as session:
-            with session.begin():
+            try:
+                # For PESSIMISTIC on SQLite: BEGIN IMMEDIATE acquires a
+                # RESERVED lock at transaction start, serializing all
+                # concurrent writers.  FOR UPDATE is a no-op on SQLite,
+                # so this is the only way to prevent stale balance reads.
+                if locking_strategy == "PESSIMISTIC":
+                    session.execute(text("BEGIN IMMEDIATE"))
+                else:
+                    session.begin()
+
                 # ── Step 1: Idempotency guard ────────────────────────
                 existing = (
                     session.query(Transaction)
@@ -209,12 +257,21 @@ class LedgerEngine:
                         f"(txn_id={existing.id})."
                     )
 
-                # ── Step 2: Pessimistic row locking ──────────────────
-                # Lock the Account rows to prevent concurrent
-                # double-spends.  This must happen BEFORE the balance
-                # aggregation query — locking the row, not the aggregate.
-                session.query(Account).with_for_update().get(sender_id)
-                session.query(Account).with_for_update().get(fx_clearing_eur_id)
+                # ── Step 2: Concurrency control ──────────────────────
+                if locking_strategy == "PESSIMISTIC":
+                    # On PostgreSQL, this would acquire row-level locks.
+                    # On SQLite, BEGIN IMMEDIATE already serializes.
+                    session.query(Account).with_for_update().get(sender_id)
+                    session.query(Account).with_for_update().get(
+                        fx_clearing_eur_id
+                    )
+                    sender_acct = None
+                    fx_eur_acct = None
+                else:
+                    # OCC: Load without locks — version_id checked at
+                    # commit via flag_modified() below.
+                    sender_acct = session.get(Account, sender_id)
+                    fx_eur_acct = session.get(Account, fx_clearing_eur_id)
 
                 # ── Step 3: FX conversion (integer arithmetic) ──────
                 recv_amount = round(send_amount * fx_rate)
@@ -226,7 +283,9 @@ class LedgerEngine:
                     )
 
                 # ── Step 4: Sufficient-funds check on sender ────────
-                sender_balance = self._get_account_balance(session, sender_id)
+                sender_balance = self._get_account_balance(
+                    session, sender_id
+                )
                 if sender_balance < send_amount:
                     raise InsufficientFundsError(
                         f"Account {sender_id} has balance "
@@ -259,32 +318,28 @@ class LedgerEngine:
 
                 # ── Step 6: Insert the four entry legs ──────────────
 
-                # Leg 1a — Sender parts with funds (CREDIT decreases
-                #          an asset-normal account).
+                # Leg 1a — CREDIT sender (funds leave)
                 entry_1a = Entry(
                     transaction_id=txn.id,
                     account_id=sender_id,
                     amount=send_amount,
                     direction=EntryDirection.CREDIT,
                 )
-                # Leg 1b — FX Clearing absorbs those funds (DEBIT
-                #          increases the clearing pool in sender currency).
+                # Leg 1b — DEBIT FX Clearing (sender currency absorbed)
                 entry_1b = Entry(
                     transaction_id=txn.id,
                     account_id=fx_clearing_usd_id,
                     amount=send_amount,
                     direction=EntryDirection.DEBIT,
                 )
-                # Leg 2a — FX Clearing releases converted funds
-                #          (CREDIT decreases the EUR pool).
+                # Leg 2a — CREDIT FX Clearing (receiver currency released)
                 entry_2a = Entry(
                     transaction_id=txn.id,
                     account_id=fx_clearing_eur_id,
                     amount=recv_amount,
                     direction=EntryDirection.CREDIT,
                 )
-                # Leg 2b — Receiver gets paid (DEBIT increases their
-                #          asset-normal account).
+                # Leg 2b — DEBIT receiver (funds arrive)
                 entry_2b = Entry(
                     transaction_id=txn.id,
                     account_id=receiver_id,
@@ -294,22 +349,145 @@ class LedgerEngine:
 
                 session.add_all([entry_1a, entry_1b, entry_2a, entry_2b])
 
-                # ── Step 7: Commit is handled by the context manager ─
-                # session.begin() will auto-commit when the block exits
-                # without an exception, or auto-rollback on error.
+                # ── Step 7: OCC version touch ───────────────────────
+                # For OCC, force a version_id bump on the Account rows.
+                # If a concurrent txn already bumped the version,
+                # session.flush() will raise StaleDataError.
+                if locking_strategy == "OCC" and sender_acct and fx_eur_acct:
+                    flag_modified(sender_acct, "name")
+                    flag_modified(fx_eur_acct, "name")
 
-        # Return a detached-but-populated object for the caller to inspect.
-        # Re-fetch so relationships are loaded cleanly.
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+        # Return a detached-but-populated object for the caller.
         with self._session_factory() as session:
             txn = (
                 session.query(Transaction)
                 .filter(Transaction.idempotency_key == idempotency_key)
                 .one()
             )
-            # Eagerly touch the entries so they're usable after detach.
             _ = [e.account for e in txn.entries]
             session.expunge_all()
             return txn
+
+    # ── transaction reversal ─────────────────────────────────────────
+
+    def reverse_transaction(self, transaction_id: int) -> Transaction:
+        """
+        Create a compensating (reversal) transaction that zeroes out the
+        effect of the original.
+
+        This is the ONLY acceptable way to "undo" a transaction in an
+        append-only ledger.  The original transaction is never modified
+        or deleted — instead, new entries are inserted with flipped
+        directions (DEBIT ↔ CREDIT).
+
+        Parameters
+        ----------
+        transaction_id : int – ID of the transaction to reverse.
+
+        Returns
+        -------
+        Transaction – The newly-created reversal transaction.
+
+        Raises
+        ------
+        TransactionNotFoundError  – If the original txn doesn't exist.
+        DuplicateTransactionError – If already reversed (REV- key exists).
+        InsufficientFundsError    – If reversal would overdraft a USER.
+        """
+        with self._session_factory() as session:
+            with session.begin():
+                # ── Load original transaction ────────────────────────
+                original = session.get(Transaction, transaction_id)
+                if original is None:
+                    raise TransactionNotFoundError(
+                        f"Transaction {transaction_id} does not exist."
+                    )
+
+                # ── Build reversal idempotency key ───────────────────
+                rev_key = f"REV-{original.idempotency_key}"
+
+                # ── Idempotency guard (prevent double-reversal) ──────
+                existing_rev = (
+                    session.query(Transaction)
+                    .filter(Transaction.idempotency_key == rev_key)
+                    .first()
+                )
+                if existing_rev is not None:
+                    raise DuplicateTransactionError(
+                        f"Transaction {transaction_id} has already been "
+                        f"reversed (reversal txn_id={existing_rev.id})."
+                    )
+
+                # ── Load original entries ────────────────────────────
+                original_entries = (
+                    session.query(Entry)
+                    .filter(Entry.transaction_id == transaction_id)
+                    .all()
+                )
+                if not original_entries:
+                    raise TransactionNotFoundError(
+                        f"Transaction {transaction_id} has no entries."
+                    )
+
+                # ── Pre-flight: check reversal won't overdraft ───────
+                # Flipping a DEBIT to CREDIT means money leaves that
+                # account.  Check USER accounts won't go negative.
+                for entry in original_entries:
+                    if entry.direction == EntryDirection.DEBIT:
+                        # Reversal will CREDIT this account (take money)
+                        acct = session.get(Account, entry.account_id)
+                        if acct and acct.type == AccountType.USER:
+                            bal = self._get_account_balance(
+                                session, entry.account_id
+                            )
+                            if bal < entry.amount:
+                                raise InsufficientFundsError(
+                                    f"Reversal would overdraft account "
+                                    f"{entry.account_id} ({acct.name}): "
+                                    f"balance={bal}, "
+                                    f"reversal_amount={entry.amount}."
+                                )
+
+                # ── Create reversal journal header ───────────────────
+                rev_txn = Transaction(
+                    description=(
+                        f"Reversal of Txn #{transaction_id}: "
+                        f"{original.description}"
+                    ),
+                    idempotency_key=rev_key,
+                )
+                session.add(rev_txn)
+                session.flush()
+
+                # ── Create reversed entry legs ───────────────────────
+                for entry in original_entries:
+                    flipped_direction = (
+                        EntryDirection.CREDIT
+                        if entry.direction == EntryDirection.DEBIT
+                        else EntryDirection.DEBIT
+                    )
+                    session.add(Entry(
+                        transaction_id=rev_txn.id,
+                        account_id=entry.account_id,
+                        amount=entry.amount,
+                        direction=flipped_direction,
+                    ))
+
+        # Return detached reversal transaction
+        with self._session_factory() as session:
+            rev = (
+                session.query(Transaction)
+                .filter(Transaction.idempotency_key == rev_key)
+                .one()
+            )
+            _ = [e.account for e in rev.entries]
+            session.expunge_all()
+            return rev
 
     # ── invariant verification ───────────────────────────────────────────
 

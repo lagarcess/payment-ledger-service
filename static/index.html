@@ -69,8 +69,23 @@
 
             <div class="divider"></div>
 
+            <div class="form-section">
+                <label class="section-label" data-i18n="lblConcurrency">Concurrency Strategy</label>
+                <div class="form-group">
+                    <label for="locking-strategy" data-i18n="lblLockingStrategy">Locking Mode</label>
+                    <select id="locking-strategy" class="form-control">
+                        <option value="PESSIMISTIC" selected>Pessimistic (FOR UPDATE)</option>
+                        <option value="OCC">Optimistic (version_id OCC)</option>
+                    </select>
+                </div>
+                <div class="helper-text" data-i18n="lockingHelper">Controls how concurrent transactions are serialized.</div>
+            </div>
+
+            <div class="divider"></div>
+
             <div class="sidebar-actions">
                 <button id="btn-execute" class="btn btn-primary" data-i18n="btnExecute">Execute Payment</button>
+                <button id="btn-race" class="btn btn-warning" data-i18n="btnRace">⚡ Simulate Double Spend</button>
                 <button id="btn-reset" class="btn btn-secondary" data-i18n="btnReset">Reset Database</button>
             </div>
             
@@ -185,6 +200,7 @@
                                     <th data-i18n="thIdemKey">IDEMPOTENCY KEY</th>
                                     <th data-i18n="thDesc">DESCRIPTION</th>
                                     <th data-i18n="thLegs">LEGS</th>
+                                    <th data-i18n="thActions">ACTIONS</th>
                                 </tr>
                             </thead>
                             <tbody><!-- Injected via JS --></tbody>
@@ -232,6 +248,10 @@
             <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </symbol>
+        <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
         </symbol>
     </svg>
 
