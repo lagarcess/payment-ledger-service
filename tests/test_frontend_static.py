@@ -15,7 +15,9 @@ def test_github_pages_uses_render_wake_status_and_timeout():
     script = (ROOT / "static" / "script.js").read_text()
 
     assert "DEFAULT_REMOTE_API_ORIGIN = 'https://ledger-api-oy0a.onrender.com'" in script
-    assert "ledger-api.onrender.com" not in script
+    assert "LEGACY_REMOTE_API_ORIGINS" in script
+    assert "https://ledger-api.onrender.com" in script
+    assert "currentApiOrigin !== normalizeApiOrigin(storedApiOrigin)" in script
     assert "apiStatusWaking" in script
     assert "function shouldUseRemoteWakeStatus()" in script
     assert "STATE_FETCH_TIMEOUT_REMOTE_MS = 90000" in script
