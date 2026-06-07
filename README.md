@@ -1,92 +1,179 @@
-# Ledger Engine
+# Enterprise Payment Ledger & Concurrency Simulator
 
-A double-entry payment ledger engine designed to execute cross-currency transfers. It includes a Python backend powered by FastAPI and SQLite, and a clean vanilla HTML/JS/CSS frontend dashboard.
+A production-grade, double-entry payment ledger engine with a Vanilla JS frontend designed to simulate and visualize distributed system edge cases — race conditions, double-spend attacks, and append-only data immutability — in real time.
 
-## Key Concepts
+Built as an interactive testbed for enterprise concurrency patterns, the system exposes two selectable locking strategies (Pessimistic and OCC) through a single API, allowing developers to observe how each mechanism prevents data corruption under simultaneous load.
 
-This project demonstrates several core fintech and accounting principles used by state-of-the-art banking systems. Here is how they work and where to find them:
+---
 
-### Double-Entry Accounting & System Invariants
-Every transaction must be perfectly balanced (`Σ debits == Σ credits`). Instead of simply changing a single account balance, money is always moved from one place to another using equal and opposite journal entries. A core "System Invariant" guarantees that the net balance of the entire universe of accounts is exactly zero at all times.
-- **How to see it at play:** Look at the "Entry Legs" table on the dashboard. When a transfer occurs, you will see multiple legs (Debits and Credits) that all sum to exactly zero. You can also monitor the "System Invariant" badge at the top, which constantly verifies the global net balance.
-- **Where the code lives:** `src/ledger.py` handles the core math, balancing logic, and global invariant checks.
+## Core Architectural Concepts
 
-### Integer Arithmetic (Minor Units)
-Floating-point numbers (decimals) are notoriously imprecise in computer science and can lead to microscopic rounding errors. In a financial ledger, a rounding error of even a fraction of a cent is catastrophic.
-- **How to see it at play:** The backend processes all amounts as integers representing the smallest unit of the currency (e.g., cents for USD/EUR). $100.00 is stored and calculated strictly as `10000`. The decimal point is only re-introduced by the frontend at the very last second for display purposes.
-- **Where the code lives:** `src/models.py` and `src/ledger.py` perform all ledger math strictly using Python integers. `static/script.js` reformats the integer back into a localized currency string.
+### Double-Entry Invariants
 
-### Treasury Seeding
-A true double-entry ledger cannot simply "create" or "print" money out of thin air to give users a starting balance; doing so would instantly violate the system invariant. 
-- **What it emulates:** This mirrors real-life banking, where an institution must first be capitalized by a central bank or equity investors. In our system, the database generates an initial "Genesis Block" that funds a root Treasury account, which then distributes seed capital to the users and the clearing pools.
-- **Where the code lives:** Look at the `bootstrap_database()` function in `src/ledger.py`, which meticulously structures the initial capital injection journal entries through append-only equity transactions.
+Every monetary movement in the system is recorded as a balanced pair of journal entries. No account balance is ever updated directly — balances are always derived from the aggregate sum of their entry legs.
 
-### Cross-Currency FX Clearing
-Payments between users with different currencies (e.g., USD to EUR) are not exchanged directly. Instead, they are routed through internal "Corporate FX Clearing" accounts. These treasury pools act as market makers: they buy the sender's currency into their USD pool, and sell the receiver's currency out of their EUR pool. This absorbs the currency conversion risk and isolates liquidity management.
-- **How to see it at play:** Execute a transfer from a USD account to a EUR account. The dashboard will automatically generate a visual flow diagram showing the USD leaving the sender, entering the USD Clearing pool, and the equivalent EUR leaving the EUR Clearing pool to the receiver.
-- **Where the code lives:** `src/ledger.py` dynamically calculates the exchange rate and creates the intermediate clearing legs during transaction processing. `static/script.js` handles the real-time diagram rendering.
+Cross-currency transfers route through internal **Corporate FX Clearing** accounts. A payment from USD to EUR produces four atomic entry legs:
 
-### ACID Database Transactions
-If a server crashes exactly halfway through processing a payment (e.g., after the sender's account is debited, but before the receiver's account is credited), the money would vanish into the ether, corrupting the ledger permanently.
-- **What it emulates:** We use strict ACID database transactions. A payment is treated as a single atomic unit of work. If any single leg of the transfer fails, or if an overdraft occurs, the *entire* operation is instantly rolled back, guaranteeing the ledger is never left in an invalid or partially-completed state.
-- **Where the code lives:** `src/ledger.py` wraps all entry creations inside a strict `with session.begin():` block that rolls back upon any exception.
+```
+CREDIT  Sender (USD)           →  Funds leave the sender
+DEBIT   FX Clearing (USD)      →  USD pool absorbs the funds
+CREDIT  FX Clearing (EUR)      →  EUR pool releases converted funds
+DEBIT   Receiver (EUR)         →  Funds arrive at the receiver
+```
 
-### Idempotency
-Idempotency prevents duplicate transactions. If a user accidentally double-clicks "Send" or a network request drops and is retried, the system ensures the payment only happens exactly once by requiring a unique, single-use key for every request.
-- **How to see it at play:** Uncheck "Auto-generate" on the dashboard, type a custom idempotency key, and execute a payment. Try executing it a second time with the exact same key. The system will safely reject the second attempt.
-- **Where the code lives:** `src/models.py` enforces a unique database constraint on the key. `src/api.py` catches duplicate errors and returns a 409 status code.
+The system enforces a global invariant at all times: **Σ debits == Σ credits == 0**. A non-zero result indicates data corruption and is treated as a critical failure.
 
-### Overdraft Protection
-End-user accounts are never allowed to drop below a zero balance.
-- **How to see it at play:** Attempt to send an amount that is larger than the sender's current balance. The transfer will be rejected and an error toast will explain exactly how short the account is.
-- **Where the code lives:** `src/ledger.py` strictly checks account balances before creating any ledger entries and raises an `InsufficientFundsError` if the transaction would result in a negative balance.
+### Append-Only Immutability
 
-### Idempotent Environment Reset
-In highly complex financial systems, rigorous testing requires an exact, predictable environment state.
-- **How to see it at play:** Clicking the "Reset Environment" button completely destroys the current database and reconstructs the ledger from the exact same initial genesis block. This allows developers and testers to reproduce edge cases repeatedly.
-- **Where the code lives:** `src/api.py` exposes the `/api/reset` endpoint, which drops the SQLite tables and triggers the seed function in `src/ledger.py`.
+Ledger data is structurally immutable at the database engine layer:
 
-## Tech Stack
+- All foreign keys on the `entries` table use `ondelete="RESTRICT"`, preventing any parent row deletion that would orphan audit history.
+- No `DELETE` or destructive `UPDATE` statement is ever issued against the `entries` or `transactions` tables.
+- No `cascade="all, delete-orphan"` configuration exists on any ledger relationship.
 
-- **Backend:** Python 3.10+, FastAPI, SQLAlchemy, SQLite (`src/api.py`, `src/models.py`, `src/ledger.py`)
-- **Frontend:** HTML5, Vanilla JavaScript, CSS (`static/index.html`, `static/script.js`, `static/style.css`)
+**Correcting mistakes** is handled exclusively through **Compensating Transactions** (reversals). A reversal reads the original transaction, flips every DEBIT to CREDIT and vice versa, and inserts them as a new, append-only transaction. The original record is never modified or removed.
 
-## Getting Started
+### Concurrency Control
+
+The payment engine exposes a **toggleable locking strategy** via a single `locking_strategy` parameter:
+
+| Strategy | Mechanism | Failure Mode |
+|----------|-----------|-------------|
+| **Pessimistic** | `BEGIN IMMEDIATE` (SQLite) / `SELECT ... FOR UPDATE` (PostgreSQL) acquires a write lock before reading balances | Thread B **blocks** until Thread A commits, then reads the updated (zero) balance → `400 Insufficient Funds` |
+| **OCC** | Account rows loaded without locks; `version_id` bumped via `flag_modified()` at commit time | Thread B's version check fails at flush → `StaleDataError` → `409 Concurrency Conflict` |
+
+Both strategies guarantee that a double-spend attack against the same account balance results in exactly one successful commit and one deterministic rejection.
+
+### High-Precision Integer Arithmetic
+
+All monetary amounts are stored as **64-bit `BigInteger`** values representing minor currency units (cents, msats). No `float`, `Decimal`, or `Numeric` type is used at any layer:
+
+- **Database**: `BigInteger` column with `CheckConstraint("amount > 0")`
+- **Python**: Native `int` — all FX conversion uses `round(send_amount * fx_rate)`
+- **Frontend**: Integer-to-display conversion occurs exclusively in the presentation layer
+
+This eliminates floating-point drift across billions of transactions and supports sub-cent precision for Lightning Network micropayments.
+
+---
+
+## The Visual Testbed
+
+The frontend is a Vanilla HTML/JS/CSS dashboard that transforms abstract concurrency theory into observable behavior.
+
+### Race Condition Simulator
+
+The **Simulate Concurrency Race** button programmatically reads the sender's full account balance and fires two simultaneous drain-entire-balance requests using `Promise.all()`:
+
+```javascript
+const [resA, resB] = await Promise.all([
+    fetch(`/api/payment`, { method: 'POST', body: JSON.stringify(payloadA) }),
+    fetch(`/api/payment`, { method: 'POST', body: JSON.stringify(payloadB) })
+]);
+```
+
+Both requests hit the API at the exact same millisecond. The **Concurrency Strategy** dropdown determines which locking mechanism the backend uses to resolve the conflict. The UI renders the result of both threads side-by-side, showing which committed and which was rejected — and why.
+
+### Transaction Reversal Flow
+
+Each non-seed transaction row in the Journal Entries table includes a **Reverse** action button. Clicking it triggers a `POST /api/reverse/{id}` call that:
+
+1. Reads the original transaction's entry legs
+2. Creates a new transaction with every direction flipped (DEBIT ↔ CREDIT)
+3. Inserts it as an append-only compensating record
+
+The original transaction receives a `REVERSED` badge and strikethrough styling. The new reversal transaction appears with a `REVERSAL` badge. The system invariant remains perfectly balanced throughout.
+
+---
+
+## Repository Structure
+
+```
+├── src/
+│   ├── __init__.py          # Package marker
+│   ├── models.py            # State Layer — ORM models, enums, DB constants
+│   ├── ledger.py            # Behavior Layer — LedgerEngine, locking, reversals
+│   └── api.py               # API Layer — FastAPI endpoints, request models
+├── static/
+│   ├── index.html           # Dashboard markup
+│   ├── script.js            # Frontend logic, i18n, race simulator
+│   └── style.css            # Design system tokens, component styles
+├── docs/
+│   ├── ARCHITECTURE.md      # Enterprise compliance mechanisms
+│   └── DESIGN.md            # UI/UX design guidelines and token system
+├── AGENTS.md                # Agent instructions and strict prohibitions
+├── pyproject.toml            # Poetry dependency manifest
+└── README.md
+```
+
+### Layer Separation
+
+| Layer | File | Responsibility |
+|-------|------|---------------|
+| **State** | `src/models.py` | SQLAlchemy ORM definitions (`Account`, `Transaction`, `Entry`), enumerations, database path constants, `version_id` OCC column |
+| **Behavior** | `src/ledger.py` | `LedgerEngine` class, payment execution, locking strategies, reversal logic, invariant verification, database bootstrap |
+| **API** | `src/api.py` | FastAPI server, request validation, endpoint routing, error mapping to HTTP status codes |
+| **Testbed** | `static/` | Interactive dashboard with race simulation, reversal UI, real-time invariant monitoring, i18n (EN/ES) |
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-Ensure you have Python 3.10+ installed.
+- Python 3.10+
+- [Poetry](https://python-poetry.org/) for dependency management
 
-### Installation & Setup
+### Install
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository_url>
-   cd lightspark-payment-service
-   ```
+```bash
+git clone https://github.com/lagarcess/payment-ledger-service.git
+cd payment-ledger-service
+poetry install
+```
 
-2. **Install dependencies:**
-   ```bash
-   pip install fastapi uvicorn sqlalchemy
-   ```
+### Bootstrap the Database
 
-3. **Initialize the Ledger:**
-   The backend script will automatically seed the SQLite database with initial users and treasury funding upon the first run.
-   ```bash
-   poetry run python -m src.ledger
-   ```
+Seeds the ledger with initial accounts, treasury capitalisation, and FX clearing liquidity via append-only equity journal entries:
 
-4. **Start the API Server:**
-   ```bash
-   poetry run uvicorn src.api:app --reload
-   ```
+```bash
+poetry run python -m src.ledger
+```
 
-5. **Access the Dashboard:**
-   Open your browser and navigate to:
-   `http://127.0.0.1:8000/`
+### Launch the Server
 
-## API Endpoints
+```bash
+poetry run uvicorn src.api:app --reload
+```
 
-- `GET /api/state`: Returns the entire ledger state (metrics, tables, invariances).
-- `POST /api/payment`: Executes a payment payload (requires `sender_id`, `receiver_id`, `send_dollars`, `fx_rate`, `idempotency_key`).
-- `POST /api/reset`: Drops the database and reseeds it back to its original state.
+Open **http://127.0.0.1:8000/** to access the dashboard.
+
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/state` | Returns the complete ledger state: invariant status, metrics, account balances, transactions, and entry legs |
+| `POST` | `/api/payment` | Executes a cross-currency payment. Accepts `sender_id`, `receiver_id`, `send_dollars`, `fx_rate`, `idempotency_key`, and `locking_strategy` (`PESSIMISTIC` or `OCC`) |
+| `POST` | `/api/reverse/{id}` | Creates a compensating reversal transaction. Returns `404` if not found, `409` if already reversed, `400` if reversal would overdraft |
+| `POST` | `/api/reset` | Drops all tables and reseeds the database to its initial state |
+
+### Error Semantics
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `400` | Overdraft prevention — insufficient funds in sender or FX clearing account |
+| `404` | Transaction not found (reversal target does not exist) |
+| `409` | Idempotency rejection (duplicate key), already reversed, or OCC version conflict |
+| `500` | Unhandled server error |
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | Python 3.10+, FastAPI, SQLAlchemy, SQLite |
+| Frontend | HTML5, Vanilla JavaScript, CSS |
+| Dependencies | Poetry (`pyproject.toml`) |
+| Fonts | Inter, Inter Tight (Google Fonts) |
