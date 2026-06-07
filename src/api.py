@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -17,7 +18,6 @@ from .models import (
     DATABASE_URL,
     Account,
     AccountType,
-    Base,
 )
 from .ledger import (
     ConcurrencyConflictError,
@@ -76,7 +76,6 @@ def startup_event():
     ensure_bootstrapped()
 
 # Mount static files (HTML, CSS, JS)
-import os
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 

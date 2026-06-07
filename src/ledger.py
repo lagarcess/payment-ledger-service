@@ -23,21 +23,15 @@ Enterprise Compliance
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
 from sqlalchemy import (
     create_engine,
     event,
-    func,
     text,
 )
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import (
     Session,
-    relationship,
     sessionmaker,
 )
 from sqlalchemy.orm.attributes import flag_modified
@@ -215,9 +209,9 @@ class LedgerEngine:
             )
         except StaleDataError:
             raise ConcurrencyConflictError(
-                f"OCC conflict: Account version_id was modified by a "
-                f"concurrent transaction.  Your payment was rejected "
-                f"to prevent a double-spend.  Retry with a fresh read."
+                "OCC conflict: Account version_id was modified by a "
+                "concurrent transaction.  Your payment was rejected "
+                "to prevent a double-spend.  Retry with a fresh read."
             )
 
     def _execute_payment_inner(
