@@ -21,12 +21,13 @@ package-mode = false
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[dependency-groups]
-dev = [
-    "ruff (>=0.15.16,<0.16.0)",
-    "pytest (>=9.0.3,<10.0.0)"
-]
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.15.16,<0.16.0"
+pytest = ">=9.0.3,<10.0.0"
 
 [tool.pyright]
 include = ["src", "tests"]
 extraPaths = ["."]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

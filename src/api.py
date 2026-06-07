@@ -83,6 +83,11 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 def read_root():
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  API MODELS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

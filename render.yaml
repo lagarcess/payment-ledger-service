@@ -2,15 +2,12 @@ services:
   - type: web
     name: ledger-api
     runtime: python
-    repo: https://github.com/lagarcess/payment-ledger-service/
+    repo: https://github.com/lagarcess/payment-ledger-service
     branch: master
     rootDir: .
     region: virginia
     plan: free
     autoDeployTrigger: off
-    buildCommand: poetry install
-    envVars:
-      - key: POETRY_VERSION
-        value: 2.4.1
+    buildCommand: pip install "poetry==2.4.1" && poetry install --only main --no-interaction
     startCommand: poetry run python -m src.ledger && poetry run uvicorn src.api:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
