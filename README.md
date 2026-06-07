@@ -149,6 +149,16 @@ can also open the Pages frontend with an explicit backend override:
 https://lagarcess.github.io/payment-ledger-service/?api=https://ledger-api-oy0a.onrender.com
 ```
 
+The Render service root is intentionally an API status page instead of a second
+dashboard:
+
+```text
+https://ledger-api-oy0a.onrender.com/
+```
+
+Use it when you want to confirm the backend is online. It links directly to the
+GitHub Pages dashboard, `/health`, `/api/state`, and the FastAPI docs.
+
 ### Backend Controls From The Gear Menu
 
 On the GitHub Pages dashboard, open the gear icon in the top-right corner and
@@ -166,6 +176,19 @@ cold, the dashboard automatically starts waking it with the first `/api/state`
 request and briefly shows a toast instead of adding a permanent banner.
 If the configured API returns `401` or `403`, the gear menu reports a protected
 or wrong backend URL instead of treating it as an ordinary offline cold start.
+
+### Deployment Flow
+
+GitHub Pages publishes the static dashboard from `static/`. Render hosts the
+FastAPI backend. Render native auto-deploy is kept off in `render.yaml` because
+the repository CI is the deployment gate: `.github/workflows/ci.yml` runs
+metadata validation, Ruff, and pytest, then triggers the Render API deploy only
+after those checks pass on `master`.
+
+The workflow expects a repository secret named `RENDER_API_KEY` with permission
+to deploy service `srv-d8il3du47okc739gbja0`. If you manage the service directly
+from Render instead of GitHub Actions, use **After CI Checks Pass** rather than
+**On Commit** so failed ledger or concurrency tests cannot redeploy the demo API.
 
 ### CORS Configuration
 

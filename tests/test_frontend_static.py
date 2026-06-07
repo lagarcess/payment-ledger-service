@@ -37,6 +37,18 @@ def test_github_pages_explains_backend_controls_without_a_banner():
     assert "apiRemoteWakeHintTitle" in script
 
 
+def test_readme_explains_render_status_page_and_gated_deploys():
+    readme = (ROOT / "README.md").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "The Render service root is intentionally an API status page" in readme
+    assert "https://ledger-api-oy0a.onrender.com/" in readme
+    assert "GitHub Actions" in readme
+    assert "After CI Checks Pass" in readme
+    assert "Deploy Render API" in workflow
+    assert "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" in workflow
+
+
 def test_frontend_distinguishes_protected_backend_from_offline():
     script = (ROOT / "static" / "script.js").read_text()
     css = (ROOT / "static" / "style.css").read_text()

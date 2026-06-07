@@ -5,11 +5,12 @@ from typing import Any, Dict, Optional
 import os
 import uuid
 from datetime import datetime, timezone
+from html import escape
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
@@ -62,6 +63,9 @@ def ensure_bootstrapped():
 
 app = FastAPI(title="Ledger Engine API")
 
+GITHUB_PAGES_DASHBOARD_URL = "https://lagarcess.github.io/payment-ledger-service/"
+RENDER_HOST_SUFFIX = ".onrender.com"
+
 DEFAULT_CORS_ALLOW_ORIGINS = (
     "http://127.0.0.1:8000",
     "http://localhost:8000",
@@ -99,8 +103,182 @@ def startup_event():
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
+
+def _is_render_host(request: Request) -> bool:
+    host = request.headers.get("host", "").split(":", maxsplit=1)[0].lower()
+    return host.endswith(RENDER_HOST_SUFFIX)
+
+
+def _render_api_status_page(request: Request) -> HTMLResponse:
+    api_origin = escape(str(request.base_url).rstrip("/"))
+    dashboard_url = escape(GITHUB_PAGES_DASHBOARD_URL)
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Ledger API Status</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --ink: #191c1f;
+      --body: #3a3d40;
+      --canvas: #ffffff;
+      --soft: #f4f4f4;
+      --hairline: #e2e2e7;
+      --dark: #000000;
+      --primary: #494fdf;
+      --teal: #00a87e;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background:
+        linear-gradient(180deg, rgba(73, 79, 223, 0.08), transparent 34%),
+        var(--canvas);
+      color: var(--ink);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }}
+    main {{
+      width: min(100%, 720px);
+      border: 1px solid var(--hairline);
+      border-radius: 20px;
+      padding: clamp(28px, 6vw, 48px);
+      background: rgba(255, 255, 255, 0.88);
+    }}
+    .eyebrow {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+      color: var(--body);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }}
+    .pulse {{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--teal);
+      box-shadow: 0 0 0 6px rgba(0, 168, 126, 0.12);
+    }}
+    h1 {{
+      max-width: 12ch;
+      margin: 0;
+      font-size: clamp(42px, 9vw, 78px);
+      line-height: 1;
+      font-weight: 600;
+      letter-spacing: 0;
+    }}
+    p {{
+      max-width: 56ch;
+      margin: 20px 0 0;
+      color: var(--body);
+      font-size: 17px;
+      line-height: 1.55;
+    }}
+    code {{
+      display: inline-block;
+      max-width: 100%;
+      margin-top: 24px;
+      padding: 10px 12px;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      background: var(--soft);
+      color: var(--ink);
+      font-size: 13px;
+    }}
+    nav {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 30px;
+    }}
+    a {{
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 11px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+    }}
+    a.primary {{
+      border-color: var(--dark);
+      background: var(--dark);
+      color: #ffffff;
+    }}
+    a:focus-visible {{
+      outline: 3px solid rgba(73, 79, 223, 0.35);
+      outline-offset: 3px;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      body {{
+        background:
+          linear-gradient(180deg, rgba(73, 79, 223, 0.22), transparent 38%),
+          #000000;
+        color: #ffffff;
+      }}
+      main {{
+        border-color: rgba(255, 255, 255, 0.12);
+        background: #16181a;
+      }}
+      p, .eyebrow {{ color: rgba(255, 255, 255, 0.72); }}
+      code {{
+        border-color: rgba(255, 255, 255, 0.12);
+        background: #0a0a0a;
+        color: #ffffff;
+      }}
+      a {{
+        border-color: rgba(255, 255, 255, 0.34);
+        color: #ffffff;
+      }}
+      a.primary {{
+        border-color: #ffffff;
+        background: #ffffff;
+        color: #000000;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>API online</div>
+    <h1>Ledger API</h1>
+    <p>
+      This Render service hosts the FastAPI backend for the payment ledger demo.
+      Use GitHub Pages for the dashboard, or inspect the API directly below.
+    </p>
+    <code>{api_origin}</code>
+    <nav aria-label="Service links">
+      <a class="primary" href="{dashboard_url}">Open Dashboard</a>
+      <a href="/health">Health</a>
+      <a href="/api/state">State</a>
+      <a href="/docs">API Docs</a>
+    </nav>
+  </main>
+</body>
+</html>""")
+
+
 @app.get("/")
-def read_root():
+def read_root(request: Request):
+    if _is_render_host(request):
+        return _render_api_status_page(request)
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 
