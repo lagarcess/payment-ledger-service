@@ -255,10 +255,8 @@ class LedgerEngine:
                 if locking_strategy == "PESSIMISTIC":
                     # On PostgreSQL, this would acquire row-level locks.
                     # On SQLite, BEGIN IMMEDIATE already serializes.
-                    session.query(Account).with_for_update().get(sender_id)
-                    session.query(Account).with_for_update().get(
-                        fx_clearing_eur_id
-                    )
+                    session.get(Account, sender_id, with_for_update=True)
+                    session.get(Account, fx_clearing_eur_id, with_for_update=True)
                     sender_acct = None
                     fx_eur_acct = None
                 else:
