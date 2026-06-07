@@ -118,7 +118,7 @@ poetry run python -m src.ledger
 poetry run uvicorn src.api:app --reload
 ```
 
-Open **http://127.0.0.1:8000/** to access the dashboard.
+Open ```http://127.0.0.1:8000/``` to access the dashboard.
 
 ### GitHub Pages Frontend
 
