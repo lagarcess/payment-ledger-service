@@ -1,6 +1,6 @@
 # Enterprise Payment Ledger & Concurrency Simulator
 
-A production-grade, double-entry payment ledger engine with a Vanilla JS frontend designed to simulate and visualize distributed system edge cases — race conditions, double-spend attacks, and append-only data immutability — in real time.
+A double-entry payment ledger engine with a Vanilla JS frontend designed to simulate and visualize distributed system edge cases — race conditions, double-spend attacks, and append-only data immutability — in real time.
 
 Built as an interactive testbed for enterprise concurrency patterns, the system exposes two selectable locking strategies (Pessimistic and OCC) through a single API, allowing developers to observe how each mechanism prevents data corruption under simultaneous load.
 
