@@ -105,8 +105,12 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 def _is_render_host(request: Request) -> bool:
+    if os.getenv("RENDER", "").lower() == "true":
+        return True
+
     host = request.headers.get("host", "").split(":", maxsplit=1)[0].lower()
-    return host.endswith(RENDER_HOST_SUFFIX)
+    external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").lower()
+    return host.endswith(RENDER_HOST_SUFFIX) or host == external_hostname
 
 
 def _render_api_status_page(request: Request) -> HTMLResponse:

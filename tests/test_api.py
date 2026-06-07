@@ -63,6 +63,17 @@ def test_render_root_shows_api_status_page():
     assert 'href="/api/state"' in body
 
 
+def test_render_runtime_env_shows_api_status_page(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+
+    response = read_root(_request_for_host("internal-render-host"))
+    body = response.body.decode()
+
+    assert isinstance(response, HTMLResponse)
+    assert "Ledger API" in body
+    assert "Open Dashboard" in body
+
+
 def test_local_root_still_serves_dashboard():
     response = read_root(_request_for_host("127.0.0.1:8000"))
 
