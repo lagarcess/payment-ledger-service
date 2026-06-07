@@ -26,7 +26,8 @@ const i18n = {
         btnRace: "Simulate Concurrency Race", thActions: "ACTIONS",
         btnReverse: "Reverse", badgeReversed: "REVERSED", badgeReversal: "REVERSAL",
         raceTitle: "Race Condition Simulation", raceThreadA: "Thread A", raceThreadB: "Thread B",
-        raceSuccess: "Committed", raceFailed: "Rejected", raceBlocked: "Blocked by lock"
+        raceSuccess: "Committed", raceFailed: "Rejected", raceBlocked: "Blocked by lock",
+        optPessimistic: "Pessimistic (FOR UPDATE)", optOptimistic: "Optimistic (OCC)"
     },
     es: {
         sbTitle: "Terminal de Pagos", sbDesc: "Ejecución de transferencias multidivisa mediante el motor de compensación.",
@@ -53,7 +54,8 @@ const i18n = {
         btnRace: "Simular Carrera de Concurrencia", thActions: "ACCIONES",
         btnReverse: "Revertir", badgeReversed: "REVERTIDA", badgeReversal: "REVERSI\u00d3N",
         raceTitle: "Simulaci\u00f3n de Condici\u00f3n de Carrera", raceThreadA: "Hilo A", raceThreadB: "Hilo B",
-        raceSuccess: "Confirmada", raceFailed: "Rechazada", raceBlocked: "Bloqueada por candado"
+        raceSuccess: "Confirmada", raceFailed: "Rechazada", raceBlocked: "Bloqueada por candado",
+        optPessimistic: "Pesimista (FOR UPDATE)", optOptimistic: "Optimista (OCC)"
     }
 };
 
@@ -568,7 +570,7 @@ async function simulateDoubleSpend() {
             ? `<div class="race-result win"><strong>${t('raceThreadB')}: ${t('raceSuccess')}</strong>${tDyn(dataB.message)}</div>`
             : `<div class="race-result lose"><strong>${t('raceThreadB')}: ${t('raceFailed')} (${resB.status})</strong>${tDyn(dataB.detail)}</div>`;
 
-        const strategyLabel = strategy === 'OCC' ? 'Optimistic (OCC)' : 'Pessimistic (FOR UPDATE)';
+        const strategyLabel = strategy === 'OCC' ? t('optOptimistic') : t('optPessimistic');
         const raceHtml = `
             <strong>${t('raceTitle')} — ${strategyLabel}</strong>
             <div style="font-size:11px;margin:4px 0 6px;opacity:0.7">Drain amount: ${sender.currency} ${drainDollars.toFixed(2)} × 2 threads</div>

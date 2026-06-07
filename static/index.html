@@ -74,8 +74,8 @@
                 <div class="form-group">
                     <label for="locking-strategy" data-i18n="lblLockingStrategy">Locking Mode</label>
                     <select id="locking-strategy" class="form-control">
-                        <option value="PESSIMISTIC" selected>Pessimistic (FOR UPDATE)</option>
-                        <option value="OCC">Optimistic (version_id OCC)</option>
+                        <option value="PESSIMISTIC" selected data-i18n="optPessimistic">Pessimistic (FOR UPDATE)</option>
+                        <option value="OCC" data-i18n="optOptimistic">Optimistic (version_id OCC)</option>
                     </select>
                 </div>
                 <div class="helper-text" data-i18n="lockingHelper">Controls how concurrent transactions are serialized.</div>
