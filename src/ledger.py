@@ -134,7 +134,7 @@ class LedgerEngine:
             """),
             {"aid": account_id},
         ).scalar()
-        return int(result)
+        return int(result) if result is not None else 0
 
     def get_account_balance(self, account_id: int) -> int:
         """Public wrapper — opens its own read-only session."""
@@ -813,7 +813,7 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
             ])
 
         # Return a map of logical names → account IDs
-        return {
+        return {  # type: ignore
             "user1": user1.id,
             "user2": user2.id,
             "fx_usd": fx_usd.id,
