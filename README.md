@@ -120,6 +120,42 @@ poetry run uvicorn src.api:app --reload
 
 Open **http://127.0.0.1:8000/** to access the dashboard.
 
+### GitHub Pages Frontend
+
+The vanilla dashboard in `static/` is also publishable as a GitHub Pages project
+site. The included workflow deploys that folder on pushes to `master`:
+
+```text
+https://lagarcess.github.io/payment-ledger-service/
+```
+
+On localhost, the frontend defaults API calls to `http://127.0.0.1:8000`. On
+GitHub Pages, it defaults to the Render backend origin:
+
+```text
+https://ledger-api.onrender.com
+```
+
+Open the gear menu to inspect or override the API URL. The panel shows the
+resolved default backend for the current host. On GitHub Pages, the first
+`/api/state` request automatically wakes the Render backend with a longer
+cold-start timeout; the **Warm** control calls `/health` as a manual retry. You
+can also open the Pages frontend with an explicit backend override:
+
+```text
+https://lagarcess.github.io/payment-ledger-service/?api=https://ledger-api.onrender.com
+```
+
+### CORS Configuration
+
+The API allows local development origins and `https://lagarcess.github.io` by
+default. Add extra frontend origins at deploy time with a comma-separated
+environment variable:
+
+```bash
+CORS_ALLOW_ORIGINS=https://example.com,http://localhost:5173
+```
+
 ---
 
 ## API Reference

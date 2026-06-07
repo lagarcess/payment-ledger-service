@@ -62,11 +62,31 @@ def ensure_bootstrapped():
 
 app = FastAPI(title="Ledger Engine API")
 
-# Enable CORS for the Vite frontend
+DEFAULT_CORS_ALLOW_ORIGINS = (
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
+    "https://lagarcess.github.io",
+)
+
+
+def get_cors_allow_origins() -> list[str]:
+    configured_origins = [
+        origin.strip().rstrip("/")
+        for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    return list(dict.fromkeys((*DEFAULT_CORS_ALLOW_ORIGINS, *configured_origins)))
+
+
+# Enable CORS for local development and the GitHub Pages static dashboard.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For local development
-    allow_credentials=True,
+    allow_origins=get_cors_allow_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,6 +102,21 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 @app.get("/")
 def read_root():
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
+
+
+@app.get("/style.css", include_in_schema=False)
+@app.head("/style.css", include_in_schema=False)
+def read_style_css():
+    return FileResponse(os.path.join(_STATIC_DIR, "style.css"), media_type="text/css")
+
+
+@app.get("/script.js", include_in_schema=False)
+@app.head("/script.js", include_in_schema=False)
+def read_script_js():
+    return FileResponse(
+        os.path.join(_STATIC_DIR, "script.js"),
+        media_type="application/javascript",
+    )
 
 
 @app.get("/health")

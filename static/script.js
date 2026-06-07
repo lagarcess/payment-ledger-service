@@ -1,4 +1,78 @@
-const API_BASE = 'http://127.0.0.1:8000/api';
+const API_ORIGIN_STORAGE_KEY = 'revApiOrigin';
+const DEFAULT_REMOTE_API_ORIGIN = 'https://ledger-api.onrender.com';
+const STATE_FETCH_TIMEOUT_LOCAL_MS = 60000;
+const STATE_FETCH_TIMEOUT_REMOTE_MS = 90000;
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+function getDefaultApiOrigin() {
+    const { hostname, origin, port, protocol } = window.location;
+    if (protocol === 'file:') return 'http://127.0.0.1:8000';
+    if (LOCAL_HOSTS.has(hostname)) {
+        return port === '8000' ? origin : 'http://127.0.0.1:8000';
+    }
+    return DEFAULT_REMOTE_API_ORIGIN;
+}
+
+function normalizeApiOrigin(value) {
+    const fallback = getDefaultApiOrigin();
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+
+    try {
+        const url = new URL(raw);
+        const normalizedPath = url.pathname
+            .replace(/\/api\/?$/, '')
+            .replace(/\/+$/, '');
+        return `${url.origin}${normalizedPath && normalizedPath !== '/' ? normalizedPath : ''}`;
+    } catch (err) {
+        return fallback;
+    }
+}
+
+const params = new URLSearchParams(window.location.search);
+const queryApiOrigin = params.get('api') || params.get('api_origin');
+let currentApiOrigin = normalizeApiOrigin(
+    queryApiOrigin || localStorage.getItem(API_ORIGIN_STORAGE_KEY) || getDefaultApiOrigin()
+);
+if (queryApiOrigin) {
+    localStorage.setItem(API_ORIGIN_STORAGE_KEY, currentApiOrigin);
+}
+
+function apiUrl(path) {
+    return `${currentApiOrigin}/api/${String(path).replace(/^\/+/, '')}`;
+}
+
+function healthUrl() {
+    return `${currentApiOrigin}/health`;
+}
+
+function shouldUseRemoteWakeStatus() {
+    return (
+        window.location.hostname.endsWith('github.io')
+        && currentApiOrigin === DEFAULT_REMOTE_API_ORIGIN
+    );
+}
+
+function getStateFetchTimeoutMs() {
+    return shouldUseRemoteWakeStatus()
+        ? STATE_FETCH_TIMEOUT_REMOTE_MS
+        : STATE_FETCH_TIMEOUT_LOCAL_MS;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = STATE_FETCH_TIMEOUT_LOCAL_MS) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch(url, {
+            cache: options.cache || 'no-store',
+            ...options,
+            signal: controller.signal
+        });
+    } finally {
+        window.clearTimeout(timeoutId);
+    }
+}
 
 const i18n = {
     en: {
@@ -18,9 +92,17 @@ const i18n = {
         invImbalance: "IMBALANCE DETECTED ─ Net: ", invLabel: "System Invariant", userCount: " user", usersCount: " users",
         accountCount: " account", accountsCount: " accounts", footerPayments: "Payments this session: ",
         toastSuccess: "Success", toastError: "Error", toastReset: "Reset", msgDbReset: "Database reset to seed state.",
-        errBackend: "Failed to connect to backend engine.", errPayment: "Network error executing payment.", errReset: "Failed to reset database.",
+        errBackend: "Backend unavailable. Warm it from settings or check the API URL.", errPayment: "Network error executing payment.", errReset: "Failed to reset database.",
         txtCredit: "CREDIT", txtDebit: "DEBIT", txtLeg: "Leg", fxClearing: "FX Clearing",
         appTitle: "Appearance", appSystem: "System", appLight: "Light", appDark: "Dark",
+        apiTitle: "Backend", lblApiOrigin: "API URL", btnSaveApi: "Save", btnResetApi: "Default",
+        apiDefaultHelper: "Default backend", apiDefaultRender: "Render", apiDefaultLocal: "local",
+        btnWarmBackend: "Warm", apiStatusIdle: "Not checked", apiStatusChecking: "Checking...",
+        apiStatusWaking: "Waking Render backend...",
+        apiStatusOnline: "Online", apiStatusOffline: "Offline", apiStatusTimeout: "Cold start timeout",
+        apiSaved: "Backend URL saved.", apiReset: "Backend URL reset.", apiWarmSuccess: "Backend is awake.",
+        apiWarmFail: "Backend did not respond.", offlineInvariant: "BACKEND OFFLINE — Warm or set API URL",
+        offlineFlow: "Ledger state unavailable until the backend responds.",
         lblConcurrency: "Concurrency Strategy", lblLockingStrategy: "Locking Mode",
         lockingHelper: "Controls how concurrent transactions are serialized.",
         btnRace: "Simulate Concurrency Race", thActions: "ACTIONS",
@@ -48,9 +130,17 @@ const i18n = {
         invImbalance: "DESCUADRE DETECTADO ─ Neto: ", invLabel: "Invariante del Sistema", userCount: " usuario", usersCount: " usuarios",
         accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos procesados en esta sesión: ",
         toastSuccess: "Éxito", toastError: "Error", toastReset: "Reiniciado", msgDbReset: "Entorno restaurado a su estado inicial.",
-        errBackend: "Sin conexión al motor contable.", errPayment: "Error de red procesando la transferencia.", errReset: "Error al reiniciar el entorno.",
+        errBackend: "Motor no disponible. Actívelo desde ajustes o revise la URL de API.", errPayment: "Error de red procesando la transferencia.", errReset: "Error al reiniciar el entorno.",
         txtCredit: "ABONO", txtDebit: "CARGO", txtLeg: "Apunte", fxClearing: "Compensación",
         appTitle: "Apariencia", appSystem: "Sistema", appLight: "Claro", appDark: "Oscuro",
+        apiTitle: "Backend", lblApiOrigin: "URL de API", btnSaveApi: "Guardar", btnResetApi: "Predeterminado",
+        apiDefaultHelper: "Backend predeterminado", apiDefaultRender: "Render", apiDefaultLocal: "local",
+        btnWarmBackend: "Activar", apiStatusIdle: "Sin comprobar", apiStatusChecking: "Comprobando...",
+        apiStatusWaking: "Activando backend de Render...",
+        apiStatusOnline: "En línea", apiStatusOffline: "Sin conexión", apiStatusTimeout: "Arranque agotado",
+        apiSaved: "URL del backend guardada.", apiReset: "URL del backend restaurada.", apiWarmSuccess: "Backend activo.",
+        apiWarmFail: "El backend no respondió.", offlineInvariant: "BACKEND SIN CONEXIÓN — Active o configure la URL",
+        offlineFlow: "El estado contable no está disponible hasta que responda el backend.",
         lblConcurrency: "Estrategia de Concurrencia", lblLockingStrategy: "Modo de Bloqueo",
         lockingHelper: "Controla c\u00f3mo se serializan las transacciones concurrentes.",
         btnRace: "Simular Carrera de Concurrencia", thActions: "ACCIONES",
@@ -164,6 +254,12 @@ const els = {
     settingsPopover: document.getElementById('settings-popover'),
     langOptions: document.querySelectorAll('.menu-list-item'),
     themeOptions: document.querySelectorAll('.segmented-btn'),
+    apiOriginInput: document.getElementById('api-origin'),
+    apiDefaultHelper: document.getElementById('api-default-helper'),
+    apiStatus: document.getElementById('api-status'),
+    btnApiSave: document.getElementById('btn-api-save'),
+    btnApiReset: document.getElementById('btn-api-reset'),
+    btnWarmBackend: document.getElementById('btn-warm-backend'),
     
     tabBtns: document.querySelectorAll('.tab-btn'),
     tabContents: document.querySelectorAll('.tab-content')
@@ -173,12 +269,21 @@ const els = {
 let state = null;
 let currentSenderId = null;
 let currentReceiverId = null;
+let backendStatus = 'idle';
+let backendStatusDetail = '';
+let lastBackendError = null;
 
 // Initialization
 async function init() {
     setupEventListeners();
     setLanguage(currentLang, false);
     setTheme(currentTheme);
+    formatAmountInput();
+    if (els.apiOriginInput) {
+        els.apiOriginInput.value = currentApiOrigin;
+    }
+    updateApiDefaultHelper();
+    setBackendStatus('idle');
     await fetchState();
     generateIdemKey();
 }
@@ -199,6 +304,14 @@ function setupEventListeners() {
     els.sender.addEventListener('change', updateFormState);
     els.receiver.addEventListener('change', updateFormState);
     els.amount.addEventListener('input', updateFormState);
+    els.amount.addEventListener('change', () => {
+        formatAmountInput();
+        updateFormState();
+    });
+    els.amount.addEventListener('blur', () => {
+        formatAmountInput();
+        updateFormState();
+    });
     els.fxRate.addEventListener('input', (e) => {
         els.fxRateVal.textContent = parseFloat(e.target.value).toFixed(2);
         updateFormState();
@@ -222,7 +335,7 @@ function setupEventListeners() {
     });
 
     document.addEventListener('click', (e) => {
-        if (!els.settingsPopover.contains(e.target) && e.target !== els.btnSettings) {
+        if (!els.settingsPopover.contains(e.target) && !els.btnSettings.contains(e.target)) {
             els.settingsPopover.classList.remove('active');
         }
     });
@@ -239,6 +352,21 @@ function setupEventListeners() {
         });
     });
 
+    if (els.btnApiSave) {
+        els.btnApiSave.addEventListener('click', saveApiOrigin);
+    }
+    if (els.btnApiReset) {
+        els.btnApiReset.addEventListener('click', resetApiOrigin);
+    }
+    if (els.btnWarmBackend) {
+        els.btnWarmBackend.addEventListener('click', () => warmBackend());
+    }
+    if (els.apiOriginInput) {
+        els.apiOriginInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') saveApiOrigin();
+        });
+    }
+
     // Buttons
     els.btnExecute.addEventListener('click', executePayment);
     els.btnRace.addEventListener('click', simulateDoubleSpend);
@@ -254,9 +382,13 @@ function setLanguage(lang, reRender = true) {
     });
     
     updateStaticText();
+    updateApiDefaultHelper();
     if (reRender && state) {
         render();
+    } else if (reRender && lastBackendError) {
+        renderDisconnectedState(lastBackendError, false);
     }
+    setBackendStatus(backendStatus, backendStatusDetail);
 }
 
 function setTheme(theme) {
@@ -270,20 +402,161 @@ function setTheme(theme) {
     });
 }
 
-// Data Fetching
-async function fetchState() {
+function formatAmountInput() {
+    const value = parseFloat(els.amount.value);
+    if (!Number.isFinite(value)) return;
+    els.amount.value = value.toFixed(2);
+}
+
+function updateApiDefaultHelper() {
+    if (!els.apiDefaultHelper) return;
+
+    const defaultOrigin = getDefaultApiOrigin();
+    const defaultLabel = defaultOrigin === DEFAULT_REMOTE_API_ORIGIN
+        ? t('apiDefaultRender')
+        : t('apiDefaultLocal');
+
+    els.apiDefaultHelper.textContent = `${t('apiDefaultHelper')}: ${defaultLabel} · ${defaultOrigin}`;
+    if (els.apiOriginInput) {
+        els.apiOriginInput.placeholder = defaultOrigin;
+    }
+}
+
+function setBackendStatus(status, detail = '') {
+    backendStatus = status;
+    backendStatusDetail = detail;
+    if (!els.apiStatus) return;
+
+    const labels = {
+        idle: t('apiStatusIdle'),
+        checking: t('apiStatusChecking'),
+        waking: t('apiStatusWaking'),
+        online: detail ? `${t('apiStatusOnline')} · ${detail}` : t('apiStatusOnline'),
+        offline: detail || t('apiStatusOffline'),
+        timeout: t('apiStatusTimeout')
+    };
+
+    els.apiStatus.className = `backend-status ${status}`;
+    els.apiStatus.textContent = labels[status] || labels.idle;
+}
+
+function saveApiOrigin() {
+    currentApiOrigin = normalizeApiOrigin(els.apiOriginInput.value);
+    localStorage.setItem(API_ORIGIN_STORAGE_KEY, currentApiOrigin);
+    els.apiOriginInput.value = currentApiOrigin;
+    updateApiDefaultHelper();
+    showToast(t('toastSuccess'), t('apiSaved'), 'success');
+    fetchState();
+}
+
+function resetApiOrigin() {
+    localStorage.removeItem(API_ORIGIN_STORAGE_KEY);
+    currentApiOrigin = normalizeApiOrigin(getDefaultApiOrigin());
+    els.apiOriginInput.value = currentApiOrigin;
+    updateApiDefaultHelper();
+    showToast(t('toastReset'), t('apiReset'), 'success');
+    fetchState();
+}
+
+async function warmBackend({ silent = false } = {}) {
+    if (els.btnWarmBackend) els.btnWarmBackend.disabled = true;
+    setBackendStatus('checking');
+    const startedAt = Date.now();
+
     try {
-        const res = await fetch(`${API_BASE}/state`);
-        state = await res.json();
-        render();
+        const res = await fetchWithTimeout(healthUrl(), {}, 65000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const latency = `${Date.now() - startedAt} ms`;
+        setBackendStatus('online', latency);
+        if (!silent) {
+            showToast(t('toastSuccess'), `${t('apiWarmSuccess')} (${latency})`, 'success');
+        }
+        await fetchState({ showError: false });
+        return true;
     } catch (err) {
-        showToast(t('toastError'), t('errBackend'), 'error');
+        const isTimeout = err.name === 'AbortError';
+        setBackendStatus(isTimeout ? 'timeout' : 'offline');
+        if (!silent) {
+            showToast(t('toastError'), t('apiWarmFail'), 'error');
+        }
+        return false;
+    } finally {
+        if (els.btnWarmBackend) els.btnWarmBackend.disabled = false;
+    }
+}
+
+// Data Fetching
+async function fetchState({ showError = true } = {}) {
+    setBackendStatus(shouldUseRemoteWakeStatus() ? 'waking' : 'checking');
+    try {
+        const res = await fetchWithTimeout(apiUrl('state'), {}, getStateFetchTimeoutMs());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        state = await res.json();
+        lastBackendError = null;
+        render();
+        setBackendStatus('online', currentApiOrigin);
+    } catch (err) {
+        lastBackendError = err;
+        renderDisconnectedState(err, showError);
+        setBackendStatus(err.name === 'AbortError' ? 'timeout' : 'offline');
+        if (showError) {
+            showToast(t('toastError'), t('errBackend'), 'error');
+        }
+    }
+}
+
+function renderDisconnectedState(_err, showError = true) {
+    state = null;
+    removeSkeletons();
+
+    els.invariantCard.className = 'invariant-card err';
+    els.invariantCard.innerHTML = `
+        <svg class="inv-icon err"><use href="#icon-alert"></use></svg>
+        <div class="inv-details">
+            <div class="inv-label">${t('apiStatusOffline')}</div>
+            <div class="inv-value err">${t('offlineInvariant')}</div>
+        </div>
+    `;
+
+    els.metricDebits.textContent = '--';
+    els.metricCredits.textContent = '--';
+    els.metricTxns.textContent = '--';
+    els.metricTxnsSub.textContent = '';
+    els.metricEntries.textContent = '--';
+    els.metricEntriesSub.textContent = '';
+    els.footerPayments.textContent = `${t('footerPayments')}0`;
+
+    els.sender.innerHTML = '';
+    els.receiver.innerHTML = '';
+    els.senderBalance.textContent = `${t('balPrefix')}--`;
+    els.fxCalc.textContent = t('offlineFlow');
+    els.flowCard.textContent = t('offlineFlow');
+
+    els.badgeAccounts.textContent = '0';
+    els.badgeTxns.textContent = '0';
+    els.badgeEntries.textContent = '0';
+    els.tableAccounts.innerHTML = `<tr><td colspan="5" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
+    els.tableTxns.innerHTML = `<tr><td colspan="6" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
+    els.tableEntries.innerHTML = `<tr><td colspan="6" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
+
+    els.btnExecute.disabled = true;
+    els.btnRace.disabled = true;
+    els.btnReset.disabled = true;
+
+    if (showError && els.apiOriginInput) {
+        els.apiOriginInput.value = currentApiOrigin;
     }
 }
 
 // Rendering
 function render() {
     removeSkeletons();
+    els.btnReset.disabled = false;
+    els.btnRace.disabled = false;
+    if (els.apiOriginInput) {
+        els.apiOriginInput.value = currentApiOrigin;
+    }
     
     // Invariant
     const inv = state.invariant;
@@ -410,7 +683,12 @@ function render() {
 }
 
 function updateFormState() {
-    if (!state) return;
+    if (!state) {
+        els.btnExecute.disabled = true;
+        els.btnRace.disabled = true;
+        els.btnReset.disabled = true;
+        return;
+    }
     
     const senderId = parseInt(els.sender.value);
     const receiverId = parseInt(els.receiver.value);
@@ -431,6 +709,8 @@ function updateFormState() {
     els.fxCalc.innerHTML = `${t('rcvPrefix')}<strong>${receiver.currency} ${formatNum(recvAmt)}</strong> · 1 ${sender.currency} = ${rate.toFixed(2)} ${receiver.currency}`;
 
     els.btnExecute.disabled = senderId === receiverId || amt <= 0;
+    els.btnRace.disabled = senderId === receiverId;
+    els.btnReset.disabled = false;
 
     // Update Flow Diagram
     const formatName = (name) => currentLang === 'es' ? name.replace('User', 'Usuario') : name;
@@ -481,7 +761,7 @@ async function executePayment() {
     };
 
     try {
-        const res = await fetch(`${API_BASE}/payment`, {
+        const res = await fetchWithTimeout(apiUrl('payment'), {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
@@ -506,11 +786,14 @@ async function executePayment() {
 async function resetDatabase() {
     els.btnReset.disabled = true;
     try {
-        const res = await fetch(`${API_BASE}/reset`, { method: 'POST' });
+        const res = await fetchWithTimeout(apiUrl('reset'), { method: 'POST' });
         if(res.ok) {
             showToast(t('toastReset'), t('msgDbReset'), 'success');
             await fetchState();
             if(els.autoKey.checked) generateIdemKey();
+        } else {
+            const data = await res.json();
+            showToast(t('toastError'), tDyn(data.detail || t('errReset')), 'error');
         }
     } catch (err) {
         showToast(t('toastError'), t('errReset'), 'error');
@@ -565,8 +848,8 @@ async function simulateDoubleSpend() {
     try {
         // Fire both requests at the exact same instant
         const [resA, resB] = await Promise.all([
-            fetch(`${API_BASE}/payment`, { method: 'POST', headers, body: JSON.stringify(payloadA) }),
-            fetch(`${API_BASE}/payment`, { method: 'POST', headers, body: JSON.stringify(payloadB) })
+            fetchWithTimeout(apiUrl('payment'), { method: 'POST', headers, body: JSON.stringify(payloadA) }),
+            fetchWithTimeout(apiUrl('payment'), { method: 'POST', headers, body: JSON.stringify(payloadB) })
         ]);
 
         const dataA = await resA.json();
@@ -601,7 +884,7 @@ async function simulateDoubleSpend() {
 // ── Transaction Reversal ────────────────────────────────────────────
 async function reverseTransaction(txnId) {
     try {
-        const res = await fetch(`${API_BASE}/reverse/${txnId}`, { method: 'POST' });
+        const res = await fetchWithTimeout(apiUrl(`reverse/${txnId}`), { method: 'POST' });
         const data = await res.json();
 
         if (res.ok) {

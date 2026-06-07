@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ledger Engine — Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=4">
+    <link rel="stylesheet" href="./style.css?v=5">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
@@ -125,6 +125,19 @@
                         <button class="segmented-btn active" data-theme-val="system" data-i18n="appSystem">System</button>
                         <button class="segmented-btn" data-theme-val="light" data-i18n="appLight">Light</button>
                         <button class="segmented-btn" data-theme-val="dark" data-i18n="appDark">Dark</button>
+                    </div>
+                    <div class="popover-divider"></div>
+                    <div class="settings-popover-title" data-i18n="apiTitle">Backend</div>
+                    <div class="backend-settings">
+                        <label for="api-origin" class="settings-field-label" data-i18n="lblApiOrigin">API URL</label>
+                        <input id="api-origin" class="settings-input" type="url" autocomplete="off" spellcheck="false">
+                        <div class="settings-helper" id="api-default-helper" data-i18n="apiDefaultHelper">Default backend</div>
+                        <div class="backend-status idle" id="api-status" aria-live="polite">Not checked</div>
+                        <div class="settings-button-row">
+                            <button id="btn-api-save" class="settings-action-btn" data-i18n="btnSaveApi">Save</button>
+                            <button id="btn-api-reset" class="settings-action-btn" data-i18n="btnResetApi">Default</button>
+                            <button id="btn-warm-backend" class="settings-action-btn primary" data-i18n="btnWarmBackend">Warm</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -264,6 +277,6 @@
         </symbol>
     </svg>
 
-    <script src="/static/script.js"></script>
+    <script src="./script.js?v=5"></script>
 </body>
 </html>
