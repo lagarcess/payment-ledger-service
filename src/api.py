@@ -261,7 +261,7 @@ def _render_api_status_page(request: Request) -> HTMLResponse:
 </head>
 <body>
   <main>
-    <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>API online</div>
+    <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>API is online</div>
     <h1>Ledger API</h1>
     <p>
       This Render service hosts the FastAPI backend for the payment ledger demo.

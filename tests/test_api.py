@@ -57,7 +57,7 @@ def test_render_root_shows_api_status_page():
     assert isinstance(response, HTMLResponse)
     assert response.status_code == 200
     assert "Ledger API" in body
-    assert "API online" in body
+    assert "API is online" in body
     assert "https://lagarcess.github.io/payment-ledger-service/" in body
     assert 'href="/health"' in body
     assert 'href="/api/state"' in body
