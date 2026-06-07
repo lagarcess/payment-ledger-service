@@ -1,5 +1,8 @@
 # Enterprise Payment Ledger & Concurrency Simulator
 
+[Open the live GitHub Pages dashboard](https://lagarcess.github.io/payment-ledger-service/)
+to try the frontend immediately.
+
 A double-entry payment ledger engine with a Vanilla JS frontend designed to simulate and visualize distributed system edge cases — race conditions, double-spend attacks, and append-only data immutability — in real time.
 
 Built as an interactive testbed for enterprise concurrency patterns, the system exposes two selectable locking strategies (Pessimistic and OCC) through a single API, allowing developers to observe how each mechanism prevents data corruption under simultaneous load.
@@ -161,6 +164,8 @@ use the **Backend** section to connect the static UI to a running API:
 The Pages experience stays intentionally quiet: if the default Render backend is
 cold, the dashboard automatically starts waking it with the first `/api/state`
 request and briefly shows a toast instead of adding a permanent banner.
+If the configured API returns `401` or `403`, the gear menu reports a protected
+or wrong backend URL instead of treating it as an ordinary offline cold start.
 
 ### CORS Configuration
 

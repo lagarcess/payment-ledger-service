@@ -74,6 +74,60 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = STATE_FETCH_TIMEO
     }
 }
 
+function createBackendHttpError(response) {
+    const err = new Error(`HTTP ${response.status}`);
+    err.status = response.status;
+    err.statusText = response.statusText;
+    return err;
+}
+
+function isProtectedBackendError(err) {
+    return err?.status === 401 || err?.status === 403;
+}
+
+function getBackendErrorStatus(err) {
+    if (err?.name === 'AbortError') return 'timeout';
+    if (isProtectedBackendError(err)) return 'protected';
+    return 'offline';
+}
+
+function getBackendErrorCopy(err) {
+    const status = getBackendErrorStatus(err);
+    if (status === 'protected') {
+        return {
+            label: t('apiStatusProtected'),
+            invariant: t('protectedInvariant'),
+            flow: t('protectedFlow'),
+            toast: t('apiProtectedFail')
+        };
+    }
+    if (status === 'timeout') {
+        return {
+            label: t('apiStatusTimeout'),
+            invariant: t('offlineInvariant'),
+            flow: t('offlineFlow'),
+            toast: t('apiWarmFail')
+        };
+    }
+    return {
+        label: t('apiStatusOffline'),
+        invariant: t('offlineInvariant'),
+        flow: t('offlineFlow'),
+        toast: t('apiWarmFail')
+    };
+}
+
+function setBackendFailureStatus(err) {
+    const status = getBackendErrorStatus(err);
+    const copy = getBackendErrorCopy(err);
+    if (status === 'protected') {
+        setBackendStatus('protected');
+    } else {
+        setBackendStatus(status);
+    }
+    return { status, copy };
+}
+
 const i18n = {
     en: {
         sbTitle: "Payment Terminal", sbDesc: "Execute cross-currency transfers through the FX clearing engine.",
@@ -81,6 +135,12 @@ const i18n = {
         lblPaymentParams: "Payment Parameters", lblAmount: "Amount", lblFxRate: "FX Rate", lblIdempotency: "Idempotency",
         lblAutoGenerate: "Auto-generate key", btnExecute: "Execute Payment", btnReset: "Reset Database",
         mainTitle: "Ledger Engine", mainSubtitle: "Double-entry payment ledger · Cross-currency FX clearing · Real-time invariant monitoring",
+        guideEyebrow: "Quick guide", guideTitle: "Read the ledger in four moves",
+        guideIntro: "Use this as a live audit console: configure a backend, send money, then inspect the invariant and legs.",
+        guideConnectTitle: "Connect", guideConnectBody: "Open the gear, Warm the backend, or paste the API URL if Render is different.",
+        guidePaymentTitle: "Transfer", guidePaymentBody: "Choose sender, receiver, amount, and FX rate; the engine routes through clearing accounts.",
+        guideInvariantTitle: "Verify", guideInvariantBody: "The invariant card should stay balanced while every debit and credit appears in the ledger legs.",
+        guideRaceTitle: "Stress", guideRaceBody: "Switch locking modes and simulate a race to see one double-spend attempt rejected.",
         metDebits: "TOTAL DEBITS", metCredits: "TOTAL CREDITS", metTxns: "TRANSACTIONS", metEntries: "ENTRIES",
         flowTitle: "Payment Flow", flowDesc: "Cross-currency settlement path through the Corporate FX Clearing Account.",
         accTitle: "Accounts", accDesc: "FX Clearing rows highlighted with subtle tint.",
@@ -100,9 +160,13 @@ const i18n = {
         btnWarmBackend: "Warm", apiStatusIdle: "Not checked", apiStatusChecking: "Checking...",
         apiStatusWaking: "Waking Render backend...",
         apiStatusOnline: "Online", apiStatusOffline: "Offline", apiStatusTimeout: "Cold start timeout",
+        apiStatusProtected: "Protected or wrong backend",
         apiSaved: "Backend URL saved.", apiReset: "Backend URL reset.", apiWarmSuccess: "Backend is awake.",
-        apiWarmFail: "Backend did not respond.", offlineInvariant: "BACKEND OFFLINE — Warm or set API URL",
+        apiWarmFail: "Backend did not respond.", apiProtectedFail: "Backend requires auth. Check the API URL.",
+        offlineInvariant: "BACKEND OFFLINE — Warm or set API URL",
+        protectedInvariant: "BACKEND REQUIRES AUTH — Check API URL",
         offlineFlow: "Ledger state unavailable until the backend responds.",
+        protectedFlow: "The configured API returned 401/403. This is likely the wrong Render service or a protected backend.",
         apiRemoteWakeHintTitle: "Waking Render",
         apiRemoteWakeHintBody: "First load can take up to 90 seconds. Use the gear to switch API URL or retry Warm.",
         lblConcurrency: "Concurrency Strategy", lblLockingStrategy: "Locking Mode",
@@ -121,6 +185,12 @@ const i18n = {
         lblPaymentParams: "Detalles de la Operación", lblAmount: "Monto", lblFxRate: "Tipo de Cambio", lblIdempotency: "Idempotencia",
         lblAutoGenerate: "Generar clave automáticamente", btnExecute: "Procesar Transferencia", btnReset: "Reiniciar Entorno",
         mainTitle: "Motor Contable", mainSubtitle: "Libro mayor de partida doble · Compensación cambiaria · Monitoreo de invariantes",
+        guideEyebrow: "Guía rápida", guideTitle: "Lea el ledger en cuatro pasos",
+        guideIntro: "Úselo como una consola de auditoría en vivo: configure el backend, envíe fondos y revise el invariante y los apuntes.",
+        guideConnectTitle: "Conectar", guideConnectBody: "Abra el engrane, active el backend o pegue la URL de API si Render es distinto.",
+        guidePaymentTitle: "Transferir", guidePaymentBody: "Elija origen, destino, monto y tipo de cambio; el motor liquida por cuentas de compensación.",
+        guideInvariantTitle: "Verificar", guideInvariantBody: "El invariante debe seguir balanceado mientras cada cargo y abono aparece en el libro mayor.",
+        guideRaceTitle: "Estresar", guideRaceBody: "Cambie el modo de bloqueo y simule una carrera para ver un doble gasto rechazado.",
         metDebits: "CARGOS TOTALES", metCredits: "ABONOS TOTALES", metTxns: "OPERACIONES", metEntries: "APUNTES CONTABLES",
         flowTitle: "Flujo de Fondos", flowDesc: "Ruta de liquidación multidivisa a través de las cuentas de compensación.",
         accTitle: "Cuentas", accDesc: "Cuentas de compensación resaltadas.",
@@ -140,9 +210,13 @@ const i18n = {
         btnWarmBackend: "Activar", apiStatusIdle: "Sin comprobar", apiStatusChecking: "Comprobando...",
         apiStatusWaking: "Activando backend de Render...",
         apiStatusOnline: "En línea", apiStatusOffline: "Sin conexión", apiStatusTimeout: "Arranque agotado",
+        apiStatusProtected: "Backend protegido o incorrecto",
         apiSaved: "URL del backend guardada.", apiReset: "URL del backend restaurada.", apiWarmSuccess: "Backend activo.",
-        apiWarmFail: "El backend no respondió.", offlineInvariant: "BACKEND SIN CONEXIÓN — Active o configure la URL",
+        apiWarmFail: "El backend no respondió.", apiProtectedFail: "El backend requiere autenticación. Revise la URL de API.",
+        offlineInvariant: "BACKEND SIN CONEXIÓN — Active o configure la URL",
+        protectedInvariant: "BACKEND REQUIERE AUTENTICACIÓN — Revise la URL",
         offlineFlow: "El estado contable no está disponible hasta que responda el backend.",
+        protectedFlow: "La API configurada devolvió 401/403. Probablemente es otro servicio de Render o un backend protegido.",
         apiRemoteWakeHintTitle: "Activando Render",
         apiRemoteWakeHintBody: "La primera carga puede tardar hasta 90 segundos. Use el engrane para cambiar la URL de API o reintentar Activar.",
         lblConcurrency: "Estrategia de Concurrencia", lblLockingStrategy: "Modo de Bloqueo",
@@ -438,6 +512,7 @@ function setBackendStatus(status, detail = '') {
         waking: t('apiStatusWaking'),
         online: detail ? `${t('apiStatusOnline')} · ${detail}` : t('apiStatusOnline'),
         offline: detail || t('apiStatusOffline'),
+        protected: detail || t('apiStatusProtected'),
         timeout: t('apiStatusTimeout')
     };
 
@@ -470,7 +545,7 @@ async function warmBackend({ silent = false } = {}) {
 
     try {
         const res = await fetchWithTimeout(healthUrl(), {}, 65000);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw createBackendHttpError(res);
 
         const latency = `${Date.now() - startedAt} ms`;
         setBackendStatus('online', latency);
@@ -480,10 +555,9 @@ async function warmBackend({ silent = false } = {}) {
         await fetchState({ showError: false });
         return true;
     } catch (err) {
-        const isTimeout = err.name === 'AbortError';
-        setBackendStatus(isTimeout ? 'timeout' : 'offline');
+        const { copy } = setBackendFailureStatus(err);
         if (!silent) {
-            showToast(t('toastError'), t('apiWarmFail'), 'error');
+            showToast(t('toastError'), copy.toast, 'error');
         }
         return false;
     } finally {
@@ -506,7 +580,7 @@ async function fetchState({ showError = true } = {}) {
 
     try {
         const res = await fetchWithTimeout(apiUrl('state'), {}, getStateFetchTimeoutMs());
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw createBackendHttpError(res);
         state = await res.json();
         lastBackendError = null;
         render();
@@ -514,9 +588,9 @@ async function fetchState({ showError = true } = {}) {
     } catch (err) {
         lastBackendError = err;
         renderDisconnectedState(err, showError);
-        setBackendStatus(err.name === 'AbortError' ? 'timeout' : 'offline');
+        const { status, copy } = setBackendFailureStatus(err);
         if (showError) {
-            showToast(t('toastError'), t('errBackend'), 'error');
+            showToast(t('toastError'), status === 'protected' ? copy.toast : t('errBackend'), 'error');
         }
     } finally {
         if (remoteWakeHintTimer) {
@@ -525,16 +599,17 @@ async function fetchState({ showError = true } = {}) {
     }
 }
 
-function renderDisconnectedState(_err, showError = true) {
+function renderDisconnectedState(err, showError = true) {
     state = null;
     removeSkeletons();
+    const copy = getBackendErrorCopy(err);
 
     els.invariantCard.className = 'invariant-card err';
     els.invariantCard.innerHTML = `
         <svg class="inv-icon err"><use href="#icon-alert"></use></svg>
         <div class="inv-details">
-            <div class="inv-label">${t('apiStatusOffline')}</div>
-            <div class="inv-value err">${t('offlineInvariant')}</div>
+            <div class="inv-label">${copy.label}</div>
+            <div class="inv-value err">${copy.invariant}</div>
         </div>
     `;
 
@@ -549,15 +624,15 @@ function renderDisconnectedState(_err, showError = true) {
     els.sender.innerHTML = '';
     els.receiver.innerHTML = '';
     els.senderBalance.textContent = `${t('balPrefix')}--`;
-    els.fxCalc.textContent = t('offlineFlow');
-    els.flowCard.textContent = t('offlineFlow');
+    els.fxCalc.textContent = copy.flow;
+    els.flowCard.textContent = copy.flow;
 
     els.badgeAccounts.textContent = '0';
     els.badgeTxns.textContent = '0';
     els.badgeEntries.textContent = '0';
-    els.tableAccounts.innerHTML = `<tr><td colspan="5" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
-    els.tableTxns.innerHTML = `<tr><td colspan="6" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
-    els.tableEntries.innerHTML = `<tr><td colspan="6" class="empty-cell">${t('apiStatusOffline')}</td></tr>`;
+    els.tableAccounts.innerHTML = `<tr><td colspan="5" class="empty-cell">${copy.label}</td></tr>`;
+    els.tableTxns.innerHTML = `<tr><td colspan="6" class="empty-cell">${copy.label}</td></tr>`;
+    els.tableEntries.innerHTML = `<tr><td colspan="6" class="empty-cell">${copy.label}</td></tr>`;
 
     els.btnExecute.disabled = true;
     els.btnRace.disabled = true;

@@ -30,3 +30,39 @@ def test_github_pages_explains_backend_controls_without_a_banner():
     assert "`/health`" in readme
     assert "remoteWakeHintShown" in script
     assert "apiRemoteWakeHintTitle" in script
+
+
+def test_frontend_distinguishes_protected_backend_from_offline():
+    script = (ROOT / "static" / "script.js").read_text()
+    css = (ROOT / "static" / "style.css").read_text()
+
+    assert "function isProtectedBackendError" in script
+    assert "apiStatusProtected" in script
+    assert "protectedInvariant" in script
+    assert "protectedFlow" in script
+    assert "setBackendStatus('protected'" in script
+    assert "setBackendStatus('protected', copy.label)" not in script
+    assert "setBackendStatus(status, copy.label)" not in script
+    assert ".backend-status.protected" in css
+
+
+def test_mobile_toasts_have_bounded_readable_layout():
+    css = (ROOT / "static" / "style.css").read_text()
+
+    assert "overflow-wrap: anywhere" in css
+    assert "left: 18px" in css
+    assert "right: 18px" in css
+    assert "width: auto" in css
+
+
+def test_quick_guide_is_language_aware_and_designed():
+    html = (ROOT / "static" / "index.html").read_text()
+    script = (ROOT / "static" / "script.js").read_text()
+    css = (ROOT / "static" / "style.css").read_text()
+
+    assert 'class="quick-guide"' in html
+    assert 'data-i18n="guideTitle"' in html
+    assert 'data-i18n="guideConnectTitle"' in html
+    assert "guideRaceBody" in script
+    assert ".quick-guide" in css
+    assert ".guide-card" in css
