@@ -146,6 +146,22 @@ can also open the Pages frontend with an explicit backend override:
 https://lagarcess.github.io/payment-ledger-service/?api=https://ledger-api.onrender.com
 ```
 
+### Backend Controls From The Gear Menu
+
+On the GitHub Pages dashboard, open the gear icon in the top-right corner and
+use the **Backend** section to connect the static UI to a running API:
+
+| Control | What it does |
+|---------|--------------|
+| `API URL` | Backend origin used by the dashboard, such as `https://ledger-api.onrender.com` or `http://127.0.0.1:8000`. Do not include `/api/state`; the frontend adds API paths automatically. |
+| `Save` | Stores the API URL in browser local storage so refreshes keep using the same backend. |
+| `Default` | Restores the automatic default: localhost during local development, Render on GitHub Pages. |
+| `Warm` | Calls `{API URL}/health` to wake or check the backend, then refreshes ledger state. This is useful for Render free-tier cold starts. |
+
+The Pages experience stays intentionally quiet: if the default Render backend is
+cold, the dashboard automatically starts waking it with the first `/api/state`
+request and briefly shows a toast instead of adding a permanent banner.
+
 ### CORS Configuration
 
 The API allows local development origins and `https://lagarcess.github.io` by

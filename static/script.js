@@ -103,6 +103,8 @@ const i18n = {
         apiSaved: "Backend URL saved.", apiReset: "Backend URL reset.", apiWarmSuccess: "Backend is awake.",
         apiWarmFail: "Backend did not respond.", offlineInvariant: "BACKEND OFFLINE — Warm or set API URL",
         offlineFlow: "Ledger state unavailable until the backend responds.",
+        apiRemoteWakeHintTitle: "Waking Render",
+        apiRemoteWakeHintBody: "First load can take up to 90 seconds. Use the gear to switch API URL or retry Warm.",
         lblConcurrency: "Concurrency Strategy", lblLockingStrategy: "Locking Mode",
         lockingHelper: "Controls how concurrent transactions are serialized.",
         btnRace: "Simulate Concurrency Race", thActions: "ACTIONS",
@@ -141,6 +143,8 @@ const i18n = {
         apiSaved: "URL del backend guardada.", apiReset: "URL del backend restaurada.", apiWarmSuccess: "Backend activo.",
         apiWarmFail: "El backend no respondió.", offlineInvariant: "BACKEND SIN CONEXIÓN — Active o configure la URL",
         offlineFlow: "El estado contable no está disponible hasta que responda el backend.",
+        apiRemoteWakeHintTitle: "Activando Render",
+        apiRemoteWakeHintBody: "La primera carga puede tardar hasta 90 segundos. Use el engrane para cambiar la URL de API o reintentar Activar.",
         lblConcurrency: "Estrategia de Concurrencia", lblLockingStrategy: "Modo de Bloqueo",
         lockingHelper: "Controla c\u00f3mo se serializan las transacciones concurrentes.",
         btnRace: "Simular Carrera de Concurrencia", thActions: "ACCIONES",
@@ -272,6 +276,7 @@ let currentReceiverId = null;
 let backendStatus = 'idle';
 let backendStatusDetail = '';
 let lastBackendError = null;
+let remoteWakeHintShown = false;
 
 // Initialization
 async function init() {
@@ -488,7 +493,17 @@ async function warmBackend({ silent = false } = {}) {
 
 // Data Fetching
 async function fetchState({ showError = true } = {}) {
-    setBackendStatus(shouldUseRemoteWakeStatus() ? 'waking' : 'checking');
+    const useRemoteWake = shouldUseRemoteWakeStatus();
+    let remoteWakeHintTimer = null;
+
+    setBackendStatus(useRemoteWake ? 'waking' : 'checking');
+    if (useRemoteWake && showError && !remoteWakeHintShown) {
+        remoteWakeHintTimer = window.setTimeout(() => {
+            remoteWakeHintShown = true;
+            showToast(t('apiRemoteWakeHintTitle'), t('apiRemoteWakeHintBody'), 'warning');
+        }, 900);
+    }
+
     try {
         const res = await fetchWithTimeout(apiUrl('state'), {}, getStateFetchTimeoutMs());
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -502,6 +517,10 @@ async function fetchState({ showError = true } = {}) {
         setBackendStatus(err.name === 'AbortError' ? 'timeout' : 'offline');
         if (showError) {
             showToast(t('toastError'), t('errBackend'), 'error');
+        }
+    } finally {
+        if (remoteWakeHintTimer) {
+            window.clearTimeout(remoteWakeHintTimer);
         }
     }
 }
