@@ -73,7 +73,7 @@ from sqlalchemy.orm import (
 #  CONSTANTS & CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-DB_PATH = Path(__file__).resolve().parent / "ledger.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "ledger.db"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Terminal formatting helpers

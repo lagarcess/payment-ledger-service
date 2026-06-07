@@ -72,12 +72,12 @@ def startup_event():
 
 # Mount static files (HTML, CSS, JS)
 import os
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 @app.get("/")
 def read_root():
-    return FileResponse("static/index.html")
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  API MODELS
