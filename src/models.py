@@ -31,7 +31,9 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Engine,
     Enum,
+    event,
     ForeignKey,
     Index,
     Integer,
@@ -42,6 +44,11 @@ from sqlalchemy.orm import (
     relationship,
 )
 from datetime import datetime, timezone
+
+@event.listens_for(Engine, "begin")
+def _sqlite_begin_immediate(conn):
+    if conn.get_execution_options().get("sqlite_begin_immediate", False):
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

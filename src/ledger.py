@@ -234,7 +234,7 @@ class LedgerEngine:
                 # concurrent writers.  FOR UPDATE is a no-op on SQLite,
                 # so this is the only way to prevent stale balance reads.
                 if locking_strategy == "PESSIMISTIC":
-                    session.execute(text("BEGIN IMMEDIATE"))
+                    session.connection(execution_options={"sqlite_begin_immediate": True})
                 else:
                     session.begin()
 
@@ -251,19 +251,29 @@ class LedgerEngine:
                         f"(txn_id={existing.id})."
                     )
 
-                # ── Step 2: Concurrency control ──────────────────────
+                # ── Step 2: Concurrency control & Existence check ────
                 if locking_strategy == "PESSIMISTIC":
                     # On PostgreSQL, this would acquire row-level locks.
                     # On SQLite, BEGIN IMMEDIATE already serializes.
-                    session.get(Account, sender_id, with_for_update=True)
-                    session.get(Account, fx_clearing_eur_id, with_for_update=True)
-                    sender_acct = None
-                    fx_eur_acct = None
+                    sender_acct = session.get(Account, sender_id, with_for_update=True)
+                    fx_eur_acct = session.get(Account, fx_clearing_eur_id, with_for_update=True)
                 else:
                     # OCC: Load without locks — version_id checked at
                     # commit via flag_modified() below.
                     sender_acct = session.get(Account, sender_id)
                     fx_eur_acct = session.get(Account, fx_clearing_eur_id)
+
+                receiver_acct = session.get(Account, receiver_id)
+                fx_usd_acct = session.get(Account, fx_clearing_usd_id)
+
+                if not sender_acct:
+                    raise ValueError(f"Sender account {sender_id} does not exist.")
+                if not receiver_acct:
+                    raise ValueError(f"Receiver account {receiver_id} does not exist.")
+                if not fx_usd_acct:
+                    raise ValueError(f"FX Clearing USD account {fx_clearing_usd_id} does not exist.")
+                if not fx_eur_acct:
+                    raise ValueError(f"FX Clearing EUR account {fx_clearing_eur_id} does not exist.")
 
                 # ── Step 3: FX conversion (integer arithmetic) ──────
                 recv_amount = round(send_amount * fx_rate)
@@ -432,7 +442,7 @@ class LedgerEngine:
                 for entry in original_entries:
                     if entry.direction == EntryDirection.DEBIT:
                         # Reversal will CREDIT this account (take money)
-                        acct = session.get(Account, entry.account_id)
+                        acct = session.get(Account, entry.account_id, with_for_update=True)
                         if acct and acct.type == AccountType.USER:
                             bal = self._get_account_balance(
                                 session, entry.account_id

@@ -304,7 +304,7 @@ def test_invalid_currency_routing(seeded_db):
     with session_factory() as session:
         initial_entry_count = session.query(Entry).count()
 
-    with pytest.raises(InsufficientFundsError):
+    with pytest.raises(ValueError):
         ledger.execute_cross_currency_payment(
             sender_id=account_ids["user1"],
             receiver_id=account_ids["user2"],
