@@ -6,82 +6,55 @@ Built as an interactive testbed for enterprise concurrency patterns, the system 
 
 ---
 
-## Core Architectural Concepts
+## Key Concepts
 
-### Double-Entry Invariants
+This project demonstrates the core fintech and distributed systems principles used by production banking infrastructure. Each concept below explains **why** it matters, **how to see it in action** on the dashboard, and **where the code lives**.
 
-Every monetary movement in the system is recorded as a balanced pair of journal entries. No account balance is ever updated directly — balances are always derived from the aggregate sum of their entry legs.
+### 1. Double-Entry Invariants
 
-Cross-currency transfers route through internal **Corporate FX Clearing** accounts. A payment from USD to EUR produces four atomic entry legs:
+Every transaction in the ledger must be perfectly balanced: **Σ debits == Σ credits**. No account balance is ever updated directly — balances are always derived from the aggregate sum of their entry legs. This fundamental accounting identity guarantees that money is never created or destroyed, only moved between accounts through equal and opposite journal entries. A global system invariant enforces that the net balance of the entire universe of accounts is exactly zero at all times.
+
+- **How to see it at play:** Execute any payment on the dashboard. Switch to the **Ledger Legs** tab to see the individual DEBIT and CREDIT entries that compose the transaction — they will always sum to exactly zero. The green **System Invariant** badge at the top of the main panel continuously verifies that `Σ debits == Σ credits` across the entire ledger. If this badge ever turns red, the system has detected data corruption.
+- **Where the code lives:** `src/ledger.py` — the `verify_system_invariants()` method runs the global sum query across all entries. The `_get_account_balance()` helper computes individual account balances from the `DEBIT - CREDIT` aggregate. All four entry legs are created atomically inside `_execute_payment_inner()`.
+
+### 2. Append-Only Immutability & Reversals
+
+Ledger data is structurally immutable at the database engine layer. All foreign keys on the `entries` table use `ondelete="RESTRICT"`, preventing any parent row deletion that would orphan audit history. No SQL `DELETE` or destructive `UPDATE` is ever issued against ledger rows. No `cascade="all, delete-orphan"` exists on any relationship. The **only** way to correct a mistake is to create a **Compensating Transaction** — a new, append-only reversal that flips every DEBIT to CREDIT and vice versa, perfectly zeroing out the original without modifying or removing it.
+
+- **How to see it at play:** Execute a payment, then click the **Reverse** button on that transaction's row in the Journal Entries table. The original transaction receives a strikethrough with a `REVERSED` badge. A brand-new reversal transaction appears below it with a `REVERSAL` badge. Switch to the **Ledger Legs** tab to see the offsetting entries. The System Invariant badge stays green — proving the ledger grew, never shrank. Attempting to reverse the same transaction again will trigger a `409 Already Reversed` rejection.
+- **Where the code lives:** `src/models.py` — the `Entry` model's foreign keys enforce `ondelete="RESTRICT"`. `src/ledger.py` — `reverse_transaction()` reads original entries, flips directions, performs a pre-flight overdraft check on USER accounts, and inserts the compensating transaction with a `REV-{original_key}` idempotency guard.
+
+### 3. Concurrency Control (Race Conditions)
+
+The payment engine exposes a **toggleable locking strategy** via a single `locking_strategy` parameter. **Pessimistic Locking** acquires a write lock (`BEGIN IMMEDIATE` on SQLite, `SELECT ... FOR UPDATE` on PostgreSQL) before reading balances, forcing Thread B to block until Thread A commits and then read the updated zero balance — resulting in an `Insufficient Funds` rejection. **Optimistic Concurrency Control (OCC)** loads Account rows without locks and instead bumps the `version_id` via `flag_modified()` at commit time. If a concurrent transaction already incremented the version, SQLAlchemy raises `StaleDataError`, which the engine wraps as a `409 Concurrency Conflict`. Both strategies guarantee that a double-spend attack against the same balance results in exactly one successful commit and one deterministic rejection.
+
+- **How to see it at play:** Select a **Concurrency Strategy** from the dropdown in the sidebar (Pessimistic or OCC). Click **Simulate Concurrency Race**. The system automatically reads the sender's entire balance and fires two simultaneous drain requests via `Promise.all()` at the exact same millisecond. A detailed race results panel will appear showing Thread A and Thread B side-by-side — one committed, one rejected — with the exact error message explaining *why* the lock prevented the double-spend.
+- **Where the code lives:** `src/ledger.py` — `_execute_payment_inner()` branches on `locking_strategy`: the `PESSIMISTIC` path executes `BEGIN IMMEDIATE` followed by `session.query(Account).with_for_update().get()`; the `OCC` path calls `session.get(Account, id)` without locks, then `flag_modified(sender_acct, "name")` to force a `version_id` bump. `StaleDataError` is caught in `execute_cross_currency_payment()` and re-raised as `ConcurrencyConflictError`. `static/script.js` — `simulateDoubleSpend()` orchestrates the `Promise.all()` race.
+
+### 4. Cross-Currency FX Clearing
+
+Payments between users with different currencies are never exchanged directly. They route through internal **Corporate FX Clearing** accounts that act as treasury market makers. The sender's currency flows into the corresponding clearing pool, and the receiver's currency flows out of the opposite pool. This four-leg settlement path absorbs currency conversion risk and isolates liquidity management from end-user accounts.
 
 ```
-CREDIT  Sender (USD)           →  Funds leave the sender
-DEBIT   FX Clearing (USD)      →  USD pool absorbs the funds
-CREDIT  FX Clearing (EUR)      →  EUR pool releases converted funds
-DEBIT   Receiver (EUR)         →  Funds arrive at the receiver
+Sender (USD) ──CREDIT──▶ FX Clearing (USD) ──DEBIT──▶ FX Clearing (EUR) ──CREDIT──▶ Receiver (EUR)
 ```
 
-The system enforces a global invariant at all times: **Σ debits == Σ credits == 0**. A non-zero result indicates data corruption and is treated as a critical failure.
+- **How to see it at play:** Select a USD sender and EUR receiver on the dashboard. The **Payment Flow** diagram updates in real time to show the four-leg routing path through both clearing accounts, with the FX-converted amounts. After executing the payment, the FX Clearing rows in the **Accounts** table (highlighted with a subtle tint) will show the updated pool balances. The **Ledger Legs** tab displays all four entry legs with their currency denominations.
+- **Where the code lives:** `src/ledger.py` — the four entry legs are created inside `_execute_payment_inner()`, with FX conversion calculated as `recv_amount = round(send_amount * fx_rate)` using strict integer arithmetic. `static/script.js` — `updateFormState()` dynamically renders the flow diagram based on the selected sender/receiver currencies.
 
-### Append-Only Immutability
+### 5. High-Precision Integer Arithmetic
 
-Ledger data is structurally immutable at the database engine layer:
+Floating-point numbers are catastrophically imprecise for financial calculations — a rounding error of even a fraction of a cent compounds across billions of transactions. All monetary amounts in this system are stored and calculated as **64-bit `BigInteger`** values representing minor currency units (cents for USD/EUR, msats for Lightning). The decimal point exists exclusively in the frontend presentation layer. `$100.00` is processed as `10000` end-to-end.
 
-- All foreign keys on the `entries` table use `ondelete="RESTRICT"`, preventing any parent row deletion that would orphan audit history.
-- No `DELETE` or destructive `UPDATE` statement is ever issued against the `entries` or `transactions` tables.
-- No `cascade="all, delete-orphan"` configuration exists on any ledger relationship.
+- **How to see it at play:** The backend API returns all amounts as raw integers (e.g., `balance_cents: 10000`). The frontend reformats these to localized currency strings (`$100.00`) only at render time. You can verify this by inspecting any `/api/state` response — every monetary field is an integer.
+- **Where the code lives:** `src/models.py` — the `Entry.amount` column uses `BigInteger` with `CheckConstraint("amount > 0")`. `src/ledger.py` — all arithmetic operates on Python `int` values; no `float` or `Decimal` is used in any calculation path. `static/script.js` — the `formatCurrency()` helper divides by 100 for display.
 
-**Correcting mistakes** is handled exclusively through **Compensating Transactions** (reversals). A reversal reads the original transaction, flips every DEBIT to CREDIT and vice versa, and inserts them as a new, append-only transaction. The original record is never modified or removed.
+### 6. Idempotency & Safe Resets
 
-### Concurrency Control
+Idempotency prevents duplicate transactions from network retries or double-clicks. Every payment request requires a unique, single-use `idempotency_key` enforced by a database-level unique constraint. The system also provides a deterministic environment reset that drops all tables and reconstructs the ledger from an identical seed state — enabling repeatable edge-case testing without manual cleanup.
 
-The payment engine exposes a **toggleable locking strategy** via a single `locking_strategy` parameter:
-
-| Strategy | Mechanism | Failure Mode |
-|----------|-----------|-------------|
-| **Pessimistic** | `BEGIN IMMEDIATE` (SQLite) / `SELECT ... FOR UPDATE` (PostgreSQL) acquires a write lock before reading balances | Thread B **blocks** until Thread A commits, then reads the updated (zero) balance → `400 Insufficient Funds` |
-| **OCC** | Account rows loaded without locks; `version_id` bumped via `flag_modified()` at commit time | Thread B's version check fails at flush → `StaleDataError` → `409 Concurrency Conflict` |
-
-Both strategies guarantee that a double-spend attack against the same account balance results in exactly one successful commit and one deterministic rejection.
-
-### High-Precision Integer Arithmetic
-
-All monetary amounts are stored as **64-bit `BigInteger`** values representing minor currency units (cents, msats). No `float`, `Decimal`, or `Numeric` type is used at any layer:
-
-- **Database**: `BigInteger` column with `CheckConstraint("amount > 0")`
-- **Python**: Native `int` — all FX conversion uses `round(send_amount * fx_rate)`
-- **Frontend**: Integer-to-display conversion occurs exclusively in the presentation layer
-
-This eliminates floating-point drift across billions of transactions and supports sub-cent precision for Lightning Network micropayments.
-
----
-
-## The Visual Testbed
-
-The frontend is a Vanilla HTML/JS/CSS dashboard that transforms abstract concurrency theory into observable behavior.
-
-### Race Condition Simulator
-
-The **Simulate Concurrency Race** button programmatically reads the sender's full account balance and fires two simultaneous drain-entire-balance requests using `Promise.all()`:
-
-```javascript
-const [resA, resB] = await Promise.all([
-    fetch(`/api/payment`, { method: 'POST', body: JSON.stringify(payloadA) }),
-    fetch(`/api/payment`, { method: 'POST', body: JSON.stringify(payloadB) })
-]);
-```
-
-Both requests hit the API at the exact same millisecond. The **Concurrency Strategy** dropdown determines which locking mechanism the backend uses to resolve the conflict. The UI renders the result of both threads side-by-side, showing which committed and which was rejected — and why.
-
-### Transaction Reversal Flow
-
-Each non-seed transaction row in the Journal Entries table includes a **Reverse** action button. Clicking it triggers a `POST /api/reverse/{id}` call that:
-
-1. Reads the original transaction's entry legs
-2. Creates a new transaction with every direction flipped (DEBIT ↔ CREDIT)
-3. Inserts it as an append-only compensating record
-
-The original transaction receives a `REVERSED` badge and strikethrough styling. The new reversal transaction appears with a `REVERSAL` badge. The system invariant remains perfectly balanced throughout.
+- **How to see it at play:** Uncheck **Auto-generate key** in the sidebar. Type a custom idempotency key and execute a payment. Attempt the exact same payment again with the same key — the system will reject it with a `409 Idempotency Rejection` toast showing the original transaction ID. To restore the environment to its pristine seed state, click **Reset Database**. All accounts, transactions, and entries are destroyed and recreated from the same genesis block.
+- **Where the code lives:** `src/models.py` — `Transaction.idempotency_key` has a `unique=True` constraint. `src/ledger.py` — `_execute_payment_inner()` checks for existing keys before proceeding. `src/api.py` — the `/api/reset` endpoint calls `bootstrap_database()`, which drops all tables and reseeds through append-only equity journal entries.
 
 ---
 
