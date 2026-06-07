@@ -313,7 +313,7 @@ function render() {
             <td>${r.timestamp.split('.')[0]}</td>
             <td class="mono">${r.idempotency_key}</td>
             <td>${tDyn(r.description)}</td>
-            <td>${r.legs_count}</td>
+            <td>${r.legs}</td>
         </tr>
     `).join('');
 
