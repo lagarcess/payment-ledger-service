@@ -52,6 +52,46 @@ function t(key) {
     return i18n[currentLang][key] || key;
 }
 
+// Translators for dynamic backend data
+const tDyn = (val) => {
+    if (currentLang !== 'es' || !val) return val;
+    let translated = String(val);
+    const dict = {
+        'CORPORATE_FX_CLEARING': 'COMPENSACIÓN',
+        'USER': 'USUARIO',
+        'CREDIT': 'ABONO',
+        'DEBIT': 'CARGO',
+        'Cross-currency transfer': 'Transferencia multidivisa',
+        'Same-currency transfer': 'Transferencia local',
+        'Initial funding: Alice receives': 'Fondeo inicial: Alicia recibe',
+        'Treasury funding: FX Clearing': 'Fondeo de Tesorería: Compensación',
+        'Treasury capitalisation: FX Clearing': 'Capitalización de Tesorería: Compensación',
+        'Alice (User 1)': 'Alicia (Usuario 1)',
+        'Bob (User 2)': 'Roberto (Usuario 2)',
+        'from Alice to Bob': 'de Alicia a Roberto',
+        'from Bob to Alice': 'de Roberto a Alicia',
+        'Alice': 'Alicia',
+        'Bob': 'Roberto',
+        'pool': ' ',
+        'Idempotency Rejection: Transaction with idempotency_key': 'Operación Duplicada: Ya existe una transacción con la clave',
+        'already exists': 'registrada',
+        '(txn_id=': '(id_transacción=',
+        'Overdraft Prevention: Account': 'Fondos Insuficientes: La cuenta',
+        'has balance': 'dispone de',
+        'cents but tried to send': 'centavos, lo cual es insuficiente para procesar el envío de',
+        'cents but needs': 'centavos, pero se requieren',
+        'cents to fund the receiver': 'centavos para completar la operación de destino',
+        'cents.': 'centavos.',
+        'Sender and Receiver must differ': 'Las cuentas de origen y destino no pueden ser la misma'
+    };
+    for (let key in dict) {
+        if (translated.includes(key)) {
+            translated = translated.split(key).join(dict[key]);
+        }
+    }
+    return translated.trim();
+};
+
 function updateStaticText() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
@@ -244,36 +284,6 @@ function render() {
     els.metricEntriesSub.textContent = `(${state.metrics.account_count}${state.metrics.account_count === 1 ? t('accountCount') : t('accountsCount')})`;
     els.footerPayments.textContent = `${t('footerPayments')}${state.session.pay_n}`;
 
-    // Translators for dynamic backend data
-    const tDyn = (val) => {
-        if (currentLang !== 'es' || !val) return val;
-        let translated = String(val);
-        const dict = {
-            'CORPORATE_FX_CLEARING': 'COMPENSACIÓN',
-            'USER': 'USUARIO',
-            'CREDIT': 'ABONO',
-            'DEBIT': 'CARGO',
-            'Cross-currency transfer': 'Transferencia multidivisa',
-            'Same-currency transfer': 'Transferencia local',
-            'Initial funding: Alice receives': 'Fondeo inicial: Alicia recibe',
-            'Treasury funding: FX Clearing': 'Fondeo de Tesorería: Compensación',
-            'Treasury capitalisation: FX Clearing': 'Capitalización de Tesorería: Compensación',
-            'Alice (User 1)': 'Alicia (Usuario 1)',
-            'Bob (User 2)': 'Roberto (Usuario 2)',
-            'from Alice to Bob': 'de Alicia a Roberto',
-            'from Bob to Alice': 'de Roberto a Alicia',
-            'Alice': 'Alicia',
-            'Bob': 'Roberto',
-            'pool': ' '
-        };
-        for (let key in dict) {
-            if (translated.includes(key)) {
-                translated = translated.split(key).join(dict[key]);
-            }
-        }
-        return translated.trim();
-    };
-
     // Selects
     const prevSender = els.sender.value;
     const prevReceiver = els.receiver.value;
@@ -416,11 +426,11 @@ async function executePayment() {
         const data = await res.json();
         
         if (res.ok) {
-            showToast(t('toastSuccess'), data.message, 'success');
+            showToast(t('toastSuccess'), tDyn(data.message), 'success');
             if(els.autoKey.checked) generateIdemKey();
             await fetchState();
         } else {
-            showToast(t('toastError'), data.detail, 'error');
+            showToast(t('toastError'), tDyn(data.detail), 'error');
         }
     } catch (err) {
         showToast(t('toastError'), t('errPayment'), 'error');
