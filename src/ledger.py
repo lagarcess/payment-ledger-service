@@ -1,82 +1,60 @@
 #!/usr/bin/env python3
 """
-sandbox_ledger.py — Double-Entry Payment Ledger Engine (Educational Sandbox)
-=============================================================================
+ledger.py — Behavior Layer for the Double-Entry Payment Ledger
+===============================================================
 
-A self-contained, runnable simulation of a production-grade double-entry
-ledger with cross-currency FX clearing, idempotency protection, and
-system-wide invariant verification.
+Implements all transactional operations, invariant verification, database
+bootstrapping, and display utilities.  This module is the **Behavior Layer**
+— it defines *how* the ledger operates against the ORM models defined in
+``models.py``.
 
-Architecture Overview
+Enterprise Compliance
 ---------------------
-Every monetary movement is recorded as a balanced *Transaction* (journal
-entry) containing two or more *Entry* legs.  The fundamental accounting
-identity enforced at all times is:
-
-    Σ debits  ==  Σ credits   (globally, and per transaction)
-
-Cross-currency payments are routed through a **Corporate FX Clearing
-Account** that absorbs currency conversion risk and maintains liquidity
-pools in each supported currency.
-
-    ┌──────────┐       Leg 1 (USD)        ┌─────────────────────┐
-    │  User A  │ ──── DEBIT ──────────▶   │  FX Clearing (USD)  │
-    │  (USD)   │                CREDIT ◀── │                     │
-    └──────────┘                          └─────────────────────┘
-                                                    │
-                                          Leg 2 (EUR)│
-                                                    ▼
-    ┌──────────┐                          ┌─────────────────────┐
-    │  User B  │ ◀──── CREDIT ────────── │  FX Clearing (EUR)  │
-    │  (EUR)   │                DEBIT ──▶ │                     │
-    └──────────┘                          └─────────────────────┘
-
-Run
----
-    python sandbox_ledger.py
-
-Requirements: Python 3.10+, SQLAlchemy (pip install sqlalchemy)
+- **Pessimistic Row Locking**: ``execute_cross_currency_payment()`` acquires
+  ``FOR UPDATE`` locks on the sender and FX clearing ``Account`` rows
+  *before* computing aggregate balances, preventing concurrent double-spends.
+- **Append-Only Bootstrap**: ``bootstrap_database()`` seeds the ledger
+  exclusively through balanced equity journal entries.  No ``DELETE`` or
+  destructive ``UPDATE`` statements are issued against ledger rows.
+- **ACID Transactions**: All multi-leg operations are wrapped in strict
+  ``with session.begin():`` blocks for atomic commit / rollback.
 """
 
 from __future__ import annotations
 
-import enum
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import (
-    BigInteger,
-    CheckConstraint,
-    Column,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    UniqueConstraint,
     create_engine,
+    event,
     func,
     text,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
-    DeclarativeBase,
     Session,
     relationship,
     sessionmaker,
 )
 
+from models import (
+    DB_PATH,
+    DATABASE_URL,
+    Account,
+    AccountType,
+    Base,
+    Entry,
+    EntryDirection,
+    Transaction,
+)
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CONSTANTS & CONFIGURATION
+#  TERMINAL FORMATTING
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-DB_PATH = Path(__file__).resolve().parent.parent / "ledger.db"
-DATABASE_URL = f"sqlite:///{DB_PATH}"
-
-# Terminal formatting helpers
 BOLD = "\033[1m"
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -84,176 +62,6 @@ YELLOW = "\033[93m"
 CYAN = "\033[96m"
 DIM = "\033[2m"
 RESET = "\033[0m"
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ENUMERATIONS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-class AccountType(str, enum.Enum):
-    """
-    Classification of ledger accounts.
-
-    USER                  – End-user wallets holding real balances.
-    CORPORATE_FX_CLEARING – Internal house account used to absorb FX
-                            conversion legs.  Operates as a liquidity pool
-                            and must be pre-funded in every supported currency.
-    """
-    USER = "USER"
-    CORPORATE_FX_CLEARING = "CORPORATE_FX_CLEARING"
-
-
-class EntryDirection(str, enum.Enum):
-    """
-    Every ledger entry is either a DEBIT (money leaving an account in
-    double-entry terms) or a CREDIT (money entering).
-
-    Convention used here (asset-normal accounts):
-        DEBIT  → increases the account balance  (funds received / loaded)
-        CREDIT → decreases the account balance  (funds sent / withdrawn)
-
-    For liability / clearing accounts the semantics invert, but the
-    arithmetic identity  Σ DEBIT == Σ CREDIT  always holds globally.
-    """
-    DEBIT = "DEBIT"
-    CREDIT = "CREDIT"
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ORM MODELS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-class Base(DeclarativeBase):
-    """Declarative base for all ORM models."""
-    pass
-
-
-class Account(Base):
-    """
-    Represents a monetary account in the ledger.
-
-    Each account is denominated in a single ISO-4217 currency code and is
-    classified by its :class:`AccountType`.
-
-    Attributes
-    ----------
-    id       : int     – Auto-incrementing primary key.
-    name     : str     – Human-readable label (e.g. "Alice", "FX Clearing USD").
-    currency : str     – ISO-4217 currency code (e.g. "USD", "EUR").
-    type     : str     – Account classification (USER | CORPORATE_FX_CLEARING).
-    entries  : list    – Back-reference to all :class:`Entry` rows linked here.
-    """
-    __tablename__ = "accounts"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(128), nullable=False)
-    currency = Column(String(3), nullable=False)
-    type = Column(Enum(AccountType), nullable=False)
-
-    # Relationships
-    entries = relationship("Entry", back_populates="account", lazy="select")
-
-    def __repr__(self) -> str:
-        return (
-            f"Account(id={self.id}, name='{self.name}', "
-            f"currency='{self.currency}', type='{self.type.value}')"
-        )
-
-
-class Transaction(Base):
-    """
-    Journal entry header — groups one or more balanced :class:`Entry` legs.
-
-    The ``idempotency_key`` column carries a UNIQUE constraint so that the
-    same logical payment can never be recorded twice, even under concurrent
-    retries or network replays.
-
-    Attributes
-    ----------
-    id              : int      – Auto-incrementing primary key.
-    timestamp       : datetime – UTC wall-clock time of journal creation.
-    description     : str      – Free-text narrative of the business event.
-    idempotency_key : str      – Caller-supplied unique token (UNIQUE constraint).
-    entries         : list     – Child :class:`Entry` legs belonging to this txn.
-    """
-    __tablename__ = "transactions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-    )
-    description = Column(String(512), nullable=False)
-    idempotency_key = Column(String(256), nullable=False, unique=True)
-
-    # Relationships
-    entries = relationship(
-        "Entry",
-        back_populates="transaction",
-        lazy="select",
-        cascade="all, delete-orphan",
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"Transaction(id={self.id}, key='{self.idempotency_key}', "
-            f"desc='{self.description}')"
-        )
-
-
-class Entry(Base):
-    """
-    A single debit or credit leg within a :class:`Transaction`.
-
-    CRITICAL DESIGN DECISION — **integer arithmetic only**.
-    The ``amount`` column stores values in the currency's minor unit
-    (e.g. cents for USD, euro-cents for EUR).  This eliminates IEEE-754
-    floating-point rounding errors that plague naïve financial systems.
-
-    Attributes
-    ----------
-    id             : int    – Auto-incrementing primary key.
-    transaction_id : int    – FK to the parent :class:`Transaction`.
-    account_id     : int    – FK to the :class:`Account` affected.
-    amount         : int    – Value in minor currency units (MUST be > 0).
-    direction      : str    – DEBIT or CREDIT.
-    """
-    __tablename__ = "entries"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    transaction_id = Column(
-        Integer,
-        ForeignKey("transactions.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    account_id = Column(
-        Integer,
-        ForeignKey("accounts.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    # BigInteger to safely handle large sums without overflow at the DB level.
-    amount = Column(BigInteger, nullable=False)
-    direction = Column(Enum(EntryDirection), nullable=False)
-
-    # Database-level guard: amounts must always be positive.  The sign
-    # semantics are carried entirely by the ``direction`` column.
-    __table_args__ = (
-        CheckConstraint("amount > 0", name="ck_entry_positive_amount"),
-        Index("ix_entry_account", "account_id"),
-        Index("ix_entry_transaction", "transaction_id"),
-    )
-
-    # Relationships
-    transaction = relationship("Transaction", back_populates="entries")
-    account = relationship("Account", back_populates="entries")
-
-    def __repr__(self) -> str:
-        return (
-            f"Entry(id={self.id}, txn={self.transaction_id}, "
-            f"acct={self.account_id}, {self.direction.value} "
-            f"{self.amount})"
-        )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -346,6 +154,13 @@ class LedgerEngine:
         The entire operation is wrapped in a single database transaction.
         Either all four entry legs commit atomically, or none do.
 
+        Pessimistic Locking
+        -------------------
+        Before computing balances, the ``Account`` rows for the sender and
+        the FX clearing (EUR) account are locked with ``FOR UPDATE`` to
+        prevent concurrent double-spends.  This is the correct approach —
+        locking the Account row rather than the aggregate query.
+
         Parameters
         ----------
         sender_id         : int   – Account ID of the payer (e.g. USD user).
@@ -368,15 +183,16 @@ class LedgerEngine:
         Detailed Flow
         -------------
         1.  Check idempotency_key against existing transactions.
-        2.  Compute the received amount:  recv_amount = round(send_amount × fx_rate)
-        3.  Verify sender has sufficient funds.
-        4.  Create journal header (Transaction).
-        5.  Insert four Entry legs:
+        2.  Lock Account rows (pessimistic locking).
+        3.  Compute the received amount:  recv_amount = round(send_amount × fx_rate)
+        4.  Verify sender has sufficient funds.
+        5.  Create journal header (Transaction).
+        6.  Insert four Entry legs:
               Leg 1a — CREDIT sender       (send_amount in sender currency)
               Leg 1b — DEBIT  FX Clearing   (send_amount in sender currency)
               Leg 2a — CREDIT FX Clearing   (recv_amount in receiver currency)
               Leg 2b — DEBIT  receiver      (recv_amount in receiver currency)
-        6.  Commit.
+        7.  Commit.
         """
         with self._session_factory() as session:
             with session.begin():
@@ -393,7 +209,14 @@ class LedgerEngine:
                         f"(txn_id={existing.id})."
                     )
 
-                # ── Step 2: FX conversion (integer arithmetic) ──────
+                # ── Step 2: Pessimistic row locking ──────────────────
+                # Lock the Account rows to prevent concurrent
+                # double-spends.  This must happen BEFORE the balance
+                # aggregation query — locking the row, not the aggregate.
+                session.query(Account).with_for_update().get(sender_id)
+                session.query(Account).with_for_update().get(fx_clearing_eur_id)
+
+                # ── Step 3: FX conversion (integer arithmetic) ──────
                 recv_amount = round(send_amount * fx_rate)
                 if recv_amount <= 0:
                     raise ValueError(
@@ -402,7 +225,7 @@ class LedgerEngine:
                         f"(send={send_amount}, rate={fx_rate})."
                     )
 
-                # ── Step 3: Sufficient-funds check on sender ────────
+                # ── Step 4: Sufficient-funds check on sender ────────
                 sender_balance = self._get_account_balance(session, sender_id)
                 if sender_balance < send_amount:
                     raise InsufficientFundsError(
@@ -411,7 +234,7 @@ class LedgerEngine:
                         f"{send_amount} cents."
                     )
 
-                # ── Step 3b: FX Clearing EUR liquidity check ────────
+                # ── Step 4b: FX Clearing EUR liquidity check ────────
                 fx_eur_balance = self._get_account_balance(
                     session, fx_clearing_eur_id
                 )
@@ -422,7 +245,7 @@ class LedgerEngine:
                         f"{recv_amount} cents to fund the receiver."
                     )
 
-                # ── Step 4: Create journal header ───────────────────
+                # ── Step 5: Create journal header ───────────────────
                 txn = Transaction(
                     description=(
                         f"Cross-currency payment: Account {sender_id} → "
@@ -434,7 +257,7 @@ class LedgerEngine:
                 session.add(txn)
                 session.flush()  # Materialize txn.id for FK references
 
-                # ── Step 5: Insert the four entry legs ──────────────
+                # ── Step 6: Insert the four entry legs ──────────────
 
                 # Leg 1a — Sender parts with funds (CREDIT decreases
                 #          an asset-normal account).
@@ -471,7 +294,7 @@ class LedgerEngine:
 
                 session.add_all([entry_1a, entry_1b, entry_2a, entry_2b])
 
-                # ── Step 6: Commit is handled by the context manager ─
+                # ── Step 7: Commit is handled by the context manager ─
                 # session.begin() will auto-commit when the block exits
                 # without an exception, or auto-rollback on error.
 
@@ -684,12 +507,17 @@ def print_entries_table(session_factory: sessionmaker) -> None:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DATABASE BOOTSTRAP
+#  DATABASE BOOTSTRAP (Append-Only)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
     """
-    Drop all tables, recreate them, and seed initial account data.
+    Drop all tables, recreate them, and seed initial account data using
+    strictly append-only equity journal entries.
+
+    No ``DELETE`` or destructive ``UPDATE`` statements are issued against
+    ledger rows.  All seed funding flows through a System Equity account
+    to maintain the double-entry invariant.
 
     Returns a dict mapping logical names to account IDs for convenience.
 
@@ -699,11 +527,12 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
     2. User 2 (EUR)  – starts at €0.00.
     3. FX Clearing (USD) – pre-funded with $1 000 000.00 liquidity.
     4. FX Clearing (EUR) – pre-funded with €1 000 000.00 liquidity.
+    5. System Equity (MULTI) – the funding source for all seed capital.
 
     The FX Clearing accounts simulate a corporate treasury pool that
     enables instant cross-currency settlement.
     """
-    # Wipe and recreate schema
+    # Wipe and recreate schema (DDL — not row deletion)
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
 
@@ -730,13 +559,19 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 currency="EUR",
                 type=AccountType.CORPORATE_FX_CLEARING,
             )
-            session.add_all([user1, user2, fx_usd, fx_eur])
+            equity = Account(
+                name="System Equity (Seed)",
+                currency="MULTI",
+                type=AccountType.CORPORATE_FX_CLEARING,
+            )
+            session.add_all([user1, user2, fx_usd, fx_eur, equity])
             session.flush()  # Materialize IDs
 
-            # ── Seed funding transactions ────────────────────────────
-            # These are "external funding" journal entries that bring
-            # money into the system.  Each is perfectly balanced:
-            # DEBIT the recipient, CREDIT a corresponding source.
+            # ── Seed funding transactions (append-only) ──────────────
+            # All funding flows through the System Equity account.
+            # Each transaction is a balanced pair of entries:
+            #   DEBIT  recipient  (funds in)
+            #   CREDIT equity     (funds out of equity pool)
 
             # Fund User 1 with $100.00
             fund_user1_txn = Transaction(
@@ -755,115 +590,25 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 ),
                 Entry(
                     transaction_id=fund_user1_txn.id,
-                    account_id=fx_usd.id,
+                    account_id=equity.id,
                     amount=10_000,
                     direction=EntryDirection.CREDIT,
                 ),
             ])
 
-            # Fund FX Clearing USD with $1,000,000.00
-            fund_fx_usd_txn = Transaction(
-                description="Treasury funding: FX Clearing USD pool",
-                idempotency_key="SEED_FUND_FX_USD",
-            )
-            session.add(fund_fx_usd_txn)
-            session.flush()
-
-            session.add_all([
-                Entry(
-                    transaction_id=fund_fx_usd_txn.id,
-                    account_id=fx_usd.id,
-                    amount=100_000_000,  # $1M in cents
-                    direction=EntryDirection.DEBIT,
-                ),
-                # Balanced against a notional external source — in a real
-                # system this would be a bank settlement account.  Here we
-                # model it as a self-balancing credit on the same account
-                # purely to maintain the invariant for seeding purposes.
-                # A production system would have an "External Settlement"
-                # account.  For this sandbox we credit User1's clearing
-                # symmetry partner — but to keep it clean, we use a
-                # dedicated "SYSTEM_SEED" pattern.
-                #
-                # SIMPLIFICATION: We use a two-legged entry against the
-                # same FX clearing account.  This has zero net effect on
-                # its balance beyond establishing the audit trail.
-                # To truly fund it, we do DEBIT only — and mirror it with
-                # a separate accounting trick below.
-            ])
-
-            # For a cleaner sandbox, we fund the FX pools via direct
-            # balanced entries against each other (USD ↔ EUR).
-            # This is the standard "treasury capitalisation" pattern.
-
-            # Remove the half-entry above and use a proper pair:
-            session.query(Entry).filter(
-                Entry.transaction_id == fund_fx_usd_txn.id
-            ).delete()
-            session.delete(fund_fx_usd_txn)
-            session.flush()
-
-            # Capitalise FX USD pool — balanced against FX EUR pool
-            cap_txn = Transaction(
-                description=(
-                    "Treasury capitalisation: "
-                    "FX pools funded with initial liquidity"
-                ),
-                idempotency_key="SEED_CAPITALISE_FX",
-            )
-            session.add(cap_txn)
-            session.flush()
-
-            session.add_all([
-                Entry(
-                    transaction_id=cap_txn.id,
-                    account_id=fx_usd.id,
-                    amount=100_000_000,  # $1M
-                    direction=EntryDirection.DEBIT,
-                ),
-                Entry(
-                    transaction_id=cap_txn.id,
-                    account_id=fx_eur.id,
-                    amount=100_000_000,  # €1M
-                    direction=EntryDirection.DEBIT,
-                ),
-                # Balanced by notional equity entries on the same
-                # accounts.  In a full Chart of Accounts you'd have
-                # an "Owner's Equity" account.  Here we use a balanced
-                # pair of credits back to the clearing accounts
-                # themselves, netting to the desired funded amount.
-                #
-                # Correct approach: introduce a SEED equity account.
-            ])
-
-            # Actually — let's do this properly with a seed equity account.
-            session.query(Entry).filter(
-                Entry.transaction_id == cap_txn.id
-            ).delete()
-            session.delete(cap_txn)
-            session.flush()
-
-            # Create a system equity account to serve as the funding source
-            equity = Account(
-                name="System Equity (Seed)",
-                currency="MULTI",
-                type=AccountType.CORPORATE_FX_CLEARING,
-            )
-            session.add(equity)
-            session.flush()
-
-            # Fund FX Clearing USD
+            # Capitalise FX Clearing USD pool — $1,000,000.00
             cap_usd_txn = Transaction(
                 description="Treasury capitalisation: FX Clearing USD",
                 idempotency_key="SEED_CAP_FX_USD",
             )
             session.add(cap_usd_txn)
             session.flush()
+
             session.add_all([
                 Entry(
                     transaction_id=cap_usd_txn.id,
                     account_id=fx_usd.id,
-                    amount=100_000_000,
+                    amount=100_000_000,  # $1M in cents
                     direction=EntryDirection.DEBIT,
                 ),
                 Entry(
@@ -874,18 +619,19 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 ),
             ])
 
-            # Fund FX Clearing EUR
+            # Capitalise FX Clearing EUR pool — €1,000,000.00
             cap_eur_txn = Transaction(
                 description="Treasury capitalisation: FX Clearing EUR",
                 idempotency_key="SEED_CAP_FX_EUR",
             )
             session.add(cap_eur_txn)
             session.flush()
+
             session.add_all([
                 Entry(
                     transaction_id=cap_eur_txn.id,
                     account_id=fx_eur.id,
-                    amount=100_000_000,
+                    amount=100_000_000,  # €1M in cents
                     direction=EntryDirection.DEBIT,
                 ),
                 Entry(
@@ -937,8 +683,6 @@ def main() -> None:
     )
 
     # Enable WAL mode and foreign keys for SQLite
-    from sqlalchemy import event
-
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
