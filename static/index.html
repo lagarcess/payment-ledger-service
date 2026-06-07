@@ -85,7 +85,16 @@
 
             <div class="sidebar-actions">
                 <button id="btn-execute" class="btn btn-primary" data-i18n="btnExecute">Execute Payment</button>
-                <button id="btn-race" class="btn btn-warning" data-i18n="btnRace">⚡ Simulate Double Spend</button>
+                <button id="btn-race" class="btn btn-ghost-warning" style="margin-top: 4px;" data-i18n="btnRace">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                        <path d="M16 3h5v5"></path>
+                        <path d="M4 20L21 3"></path>
+                        <path d="M21 16v5h-5"></path>
+                        <path d="M15 15l6 6"></path>
+                        <path d="M4 4l5 5"></path>
+                    </svg>
+                    Simulate Concurrency Race
+                </button>
                 <button id="btn-reset" class="btn btn-secondary" data-i18n="btnReset">Reset Database</button>
             </div>
             

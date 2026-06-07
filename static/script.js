@@ -23,7 +23,7 @@ const i18n = {
         appTitle: "Appearance", appSystem: "System", appLight: "Light", appDark: "Dark",
         lblConcurrency: "Concurrency Strategy", lblLockingStrategy: "Locking Mode",
         lockingHelper: "Controls how concurrent transactions are serialized.",
-        btnRace: "\u26a1 Simulate Double Spend", thActions: "ACTIONS",
+        btnRace: "Simulate Concurrency Race", thActions: "ACTIONS",
         btnReverse: "Reverse", badgeReversed: "REVERSED", badgeReversal: "REVERSAL",
         raceTitle: "Race Condition Simulation", raceThreadA: "Thread A", raceThreadB: "Thread B",
         raceSuccess: "Committed", raceFailed: "Rejected", raceBlocked: "Blocked by lock"
@@ -50,7 +50,7 @@ const i18n = {
         appTitle: "Apariencia", appSystem: "Sistema", appLight: "Claro", appDark: "Oscuro",
         lblConcurrency: "Estrategia de Concurrencia", lblLockingStrategy: "Modo de Bloqueo",
         lockingHelper: "Controla c\u00f3mo se serializan las transacciones concurrentes.",
-        btnRace: "\u26a1 Simular Doble Gasto", thActions: "ACCIONES",
+        btnRace: "Simular Carrera de Concurrencia", thActions: "ACCIONES",
         btnReverse: "Revertir", badgeReversed: "REVERTIDA", badgeReversal: "REVERSI\u00d3N",
         raceTitle: "Simulaci\u00f3n de Condici\u00f3n de Carrera", raceThreadA: "Hilo A", raceThreadB: "Hilo B",
         raceSuccess: "Confirmada", raceFailed: "Rechazada", raceBlocked: "Bloqueada por candado"

@@ -657,21 +657,25 @@ body {
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-/* ── Warning Button (Double Spend Simulator) ── */
-.btn-warning {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #fff;
-    border: none;
-    font-weight: 600;
-    font-size: 14px;
+/* ── Ghost Warning Button (Concurrency Race Simulator) ── */
+.btn-ghost-warning {
+    background: transparent;
+    color: #d97706;
+    border: 1px solid rgba(217, 119, 6, 0.3);
+    font-weight: 500;
+    font-size: 13px;
     height: 42px;
-    letter-spacing: 0.2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
 }
-.btn-warning:hover:not(:disabled) {
-    background: linear-gradient(135deg, #d97706, #b45309);
+.btn-ghost-warning:hover:not(:disabled) {
+    background: rgba(217, 119, 6, 0.1);
+    border-color: #d97706;
 }
-.btn-warning:disabled {
-    opacity: 0.5;
+.btn-ghost-warning:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
 }
 
