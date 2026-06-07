@@ -73,7 +73,7 @@ Ensure you have Python 3.10+ installed.
 3. **Initialize the Ledger:**
    The backend script will automatically seed the SQLite database with initial users and treasury funding upon the first run.
    ```bash
-   poetry run python src/ledger.py
+   poetry run python -m src.ledger
    ```
 
 4. **Start the API Server:**

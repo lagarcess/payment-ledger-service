@@ -40,7 +40,7 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-from models import (
+from .models import (
     DB_PATH,
     DATABASE_URL,
     Account,

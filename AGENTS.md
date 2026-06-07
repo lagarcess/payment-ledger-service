@@ -93,7 +93,7 @@ The project uses Poetry. Run commands using `poetry run`.
 
 1. **Seed/Reset the database:**
    ```bash
-   poetry run python src/ledger.py
+   poetry run python -m src.ledger
    ```
 2. **Start the development server:**
    ```bash
