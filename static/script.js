@@ -358,6 +358,7 @@ let remoteWakeHintShown = false;
 
 // Initialization
 async function init() {
+    setupToastLayer();
     setupEventListeners();
     setLanguage(currentLang, false);
     setTheme(currentTheme);
@@ -369,6 +370,12 @@ async function init() {
     setBackendStatus('idle');
     await fetchState();
     generateIdemKey();
+}
+
+function setupToastLayer() {
+    if (els.toastContainer && els.toastContainer.parentElement !== document.body) {
+        document.body.appendChild(els.toastContainer);
+    }
 }
 
 function setupEventListeners() {
@@ -840,9 +847,29 @@ function generateIdemKey() {
 function showToast(title, msg, type = 'success') {
     const t = document.createElement('div');
     t.className = `toast ${type}`;
-    t.innerHTML = `<strong>${title}</strong><br>${msg}`;
+    t.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+    const titleMarkup = title ? `<strong>${title}</strong>` : '';
+    t.innerHTML = `
+        <button class="toast-close" type="button" aria-label="Dismiss notification">&times;</button>
+        ${titleMarkup}
+        <div class="toast-message">${msg}</div>
+    `;
+
+    while (els.toastContainer.children.length >= 3) {
+        els.toastContainer.firstElementChild.remove();
+    }
+
     els.toastContainer.appendChild(t);
-    setTimeout(() => t.remove(), 5000);
+    const closeToast = () => {
+        t.classList.add('toast-exit');
+        window.setTimeout(() => t.remove(), 180);
+    };
+    const closeTimer = window.setTimeout(closeToast, 8000);
+    t.querySelector('.toast-close').addEventListener('click', () => {
+        window.clearTimeout(closeTimer);
+        closeToast();
+    });
 }
 
 // API Actions

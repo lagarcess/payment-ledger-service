@@ -11,6 +11,13 @@ def test_backend_settings_explain_default_origin():
     assert 'data-i18n="apiDefaultHelper"' in html
 
 
+def test_frontend_assets_use_current_cache_key():
+    html = (ROOT / "static" / "index.html").read_text()
+
+    assert './style.css?v=13' in html
+    assert './script.js?v=13' in html
+
+
 def test_github_pages_uses_render_wake_status_and_timeout():
     script = (ROOT / "static" / "script.js").read_text()
 
@@ -70,6 +77,21 @@ def test_mobile_toasts_have_bounded_readable_layout():
     assert "left: 18px" in css
     assert "right: 18px" in css
     assert "width: auto" in css
+
+
+def test_toasts_are_prominent_and_outside_sidebar_stack():
+    script = (ROOT / "static" / "script.js").read_text()
+    css = (ROOT / "static" / "style.css").read_text()
+
+    assert "function setupToastLayer()" in script
+    assert "document.body.appendChild(els.toastContainer)" in script
+    assert "role', type === 'error' ? 'alert' : 'status'" in script
+    assert "window.setTimeout(closeToast, 8000)" in script
+    assert "toast-close" in script
+    assert "top: 24px" in css
+    assert "z-index: 20000" in css
+    assert "min-height: 64px" in css
+    assert "box-shadow: 0 18px 42px" in css
 
 
 def test_quick_guide_is_language_aware_and_designed():
