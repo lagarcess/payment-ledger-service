@@ -27,7 +27,9 @@ const i18n = {
         btnReverse: "Reverse", badgeReversed: "REVERSED", badgeReversal: "REVERSAL",
         raceTitle: "Race Condition Simulation", raceThreadA: "Thread A", raceThreadB: "Thread B",
         raceSuccess: "Committed", raceFailed: "Rejected", raceBlocked: "Blocked by lock",
-        optPessimistic: "Pessimistic (FOR UPDATE)", optOptimistic: "Optimistic (OCC)"
+        optPessimistic: "Pessimistic (FOR UPDATE)", optOptimistic: "Optimistic (OCC)",
+        errSameSenderReceiver: "Select different sender and receiver.", errZeroBalance: "Sender has zero balance. Reset the database first.",
+        errRaceNet: "Race simulation network error.", errRevNet: "Network error during reversal."
     },
     es: {
         sbTitle: "Terminal de Pagos", sbDesc: "Ejecución de transferencias multidivisa mediante el motor de compensación.",
@@ -55,7 +57,9 @@ const i18n = {
         btnReverse: "Revertir", badgeReversed: "REVERTIDA", badgeReversal: "REVERSI\u00d3N",
         raceTitle: "Simulaci\u00f3n de Condici\u00f3n de Carrera", raceThreadA: "Hilo A", raceThreadB: "Hilo B",
         raceSuccess: "Confirmada", raceFailed: "Rechazada", raceBlocked: "Bloqueada por candado",
-        optPessimistic: "Pesimista (FOR UPDATE)", optOptimistic: "Optimista (OCC)"
+        optPessimistic: "Pesimista (FOR UPDATE)", optOptimistic: "Optimista (OCC)",
+        errSameSenderReceiver: "Seleccione cuentas de origen y destino distintas.", errZeroBalance: "La cuenta origen tiene saldo cero. Reinicie la base de datos.",
+        errRaceNet: "Error de red durante la simulación de carrera.", errRevNet: "Error de red al revertir operación."
     }
 };
 
@@ -96,7 +100,13 @@ const tDyn = (val) => {
         'cents but needs': 'centavos, pero se requieren',
         'cents to fund the receiver': 'centavos para completar la operación de destino',
         'cents.': 'centavos.',
-        'Sender and Receiver must differ': 'Las cuentas de origen y destino no pueden ser la misma'
+        'Sender and Receiver must differ': 'Las cuentas de origen y destino no pueden ser la misma',
+        'Transaction #': 'Transacción #',
+        ' committed successfully.': ' confirmada con éxito.',
+        'Reversal transaction #': 'Transacción de reversión #',
+        ' committed. Original transaction #': ' confirmada. La operación original #',
+        ' has been offset.': ' ha sido compensada.',
+        'Already Reversed: ': 'Ya revertida: '
     };
     for (let key in dict) {
         if (translated.includes(key)) {
@@ -519,7 +529,7 @@ async function simulateDoubleSpend() {
     const sender = state.user_accounts.find(a => a.id === senderId);
 
     if (!sender || senderId === receiverId) {
-        showToast(t('toastError'), 'Select different sender and receiver.', 'error');
+        showToast(t('toastError'), t('errSameSenderReceiver'), 'error');
         els.btnRace.disabled = false;
         updateFormState();
         return;
@@ -528,7 +538,7 @@ async function simulateDoubleSpend() {
     // Auto-drain entire balance: use the sender's full balance
     const drainDollars = sender.balance_cents / 100;
     if (drainDollars <= 0) {
-        showToast(t('toastError'), 'Sender has zero balance. Reset the database first.', 'error');
+        showToast(t('toastError'), t('errZeroBalance'), 'error');
         els.btnRace.disabled = false;
         updateFormState();
         return;
@@ -581,7 +591,7 @@ async function simulateDoubleSpend() {
         if (els.autoKey.checked) generateIdemKey();
         await fetchState();
     } catch (err) {
-        showToast(t('toastError'), 'Race simulation network error.', 'error');
+        showToast(t('toastError'), t('errRaceNet'), 'error');
     } finally {
         els.btnRace.disabled = false;
         updateFormState();
@@ -601,7 +611,7 @@ async function reverseTransaction(txnId) {
             showToast(t('toastError'), tDyn(data.detail), 'error');
         }
     } catch (err) {
-        showToast(t('toastError'), 'Network error during reversal.', 'error');
+        showToast(t('toastError'), t('errRevNet'), 'error');
     }
 }
 // Make reverseTransaction available globally for onclick handlers
