@@ -8,20 +8,21 @@ bootstrapping, and display utilities.  This module is the **Behavior Layer**
 — it defines *how* the ledger operates against the ORM models defined in
 ``models.py``.
 
-Enterprise Compliance
----------------------
-- **Pessimistic Row Locking**: ``execute_cross_currency_payment()`` acquires
-  ``FOR UPDATE`` locks on the sender and FX clearing ``Account`` rows
-  *before* computing aggregate balances, preventing concurrent double-spends.
-- **Append-Only Bootstrap**: ``bootstrap_database()`` seeds the ledger
-  exclusively through balanced equity journal entries.  No ``DELETE`` or
-  destructive ``UPDATE`` statements are issued against ledger rows.
-- **ACID Transactions**: All multi-leg operations are wrapped in strict
-  ``with session.begin():`` blocks for atomic commit / rollback.
+Educational Simulator Guarantees
+--------------------------------
+- **Currency-aware invariants**: transaction and system checks balance
+  debit/credit totals independently per currency.
+- **Append-only bootstrap**: ``bootstrap_database()`` seeds the ledger through
+  balanced equity journal entries.  Ordinary corrections use reversals.
+- **Concurrency demo paths**: payment execution exposes pessimistic and OCC
+  strategies to illustrate tradeoffs in a SQLite-backed simulator.
 """
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import hashlib
+import json
 import sys
 
 from sqlalchemy import (
@@ -29,6 +30,7 @@ from sqlalchemy import (
     event,
     text,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import (
     Session,
@@ -44,8 +46,18 @@ from .models import (
     Base,
     Entry,
     EntryDirection,
+    FxQuoteSnapshot,
     Transaction,
+    TransactionType,
 )
+
+
+ROUNDING_MODE = "ROUND_HALF_UP"
+VALID_LOCKING_STRATEGIES = {"PESSIMISTIC", "OCC"}
+CURRENCY_MINOR_UNITS = {
+    "USD": 2,
+    "EUR": 2,
+}
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  TERMINAL FORMATTING
@@ -66,6 +78,11 @@ RESET = "\033[0m"
 
 class DuplicateTransactionError(Exception):
     """Raised when an idempotency_key has already been consumed."""
+    pass
+
+
+class IdempotencyConflictError(Exception):
+    """Raised when a key is reused for a different logical request."""
     pass
 
 
@@ -141,6 +158,234 @@ class LedgerEngine:
         with self._session_factory() as session:
             return self._get_account_balance(session, account_id)
 
+    def _validate_send_amount(self, send_amount: int) -> int:
+        if type(send_amount) is not int or send_amount <= 0:
+            raise ValueError(
+                "send_amount must be a positive integer minor-unit amount."
+            )
+        return send_amount
+
+    def _validate_locking_strategy(self, locking_strategy: str) -> str:
+        normalized = str(locking_strategy).upper()
+        if normalized not in VALID_LOCKING_STRATEGIES:
+            raise ValueError(
+                "locking_strategy must be one of: OCC, PESSIMISTIC."
+            )
+        return normalized
+
+    def _normalize_decimal_input(self, value: str | Decimal, field_name: str) -> tuple[Decimal, str, str]:
+        if not isinstance(value, (str, Decimal)):
+            raise ValueError(f"{field_name} must be supplied as a string or Decimal.")
+
+        if isinstance(value, Decimal):
+            decimal_value = value
+            raw_text = format(value, "f")
+        else:
+            raw_text = value.strip()
+            if not raw_text:
+                raise ValueError(f"{field_name} must not be empty.")
+            try:
+                decimal_value = Decimal(raw_text)
+            except InvalidOperation as exc:
+                raise ValueError(f"{field_name} must be a valid decimal string.") from exc
+
+        if not decimal_value.is_finite() or decimal_value <= 0:
+            raise ValueError(f"{field_name} must be positive.")
+
+        normalized = format(decimal_value.normalize(), "f")
+        return decimal_value, raw_text, normalized
+
+    def _minor_unit_quantum(self, currency: str) -> Decimal:
+        precision = CURRENCY_MINOR_UNITS.get(currency)
+        if precision is None:
+            raise ValueError(f"Unsupported currency '{currency}'.")
+        return Decimal(1).scaleb(-precision)
+
+    def _convert_minor_units(
+        self,
+        source_amount_minor: int,
+        *,
+        from_currency: str,
+        to_currency: str,
+        rate: Decimal,
+    ) -> int:
+        from_precision = CURRENCY_MINOR_UNITS.get(from_currency)
+        to_precision = CURRENCY_MINOR_UNITS.get(to_currency)
+        if from_precision is None:
+            raise ValueError(f"Unsupported source currency '{from_currency}'.")
+        if to_precision is None:
+            raise ValueError(f"Unsupported destination currency '{to_currency}'.")
+
+        source_major = Decimal(source_amount_minor).scaleb(-from_precision)
+        destination_major = (source_major * rate).quantize(
+            self._minor_unit_quantum(to_currency),
+            rounding=ROUND_HALF_UP,
+        )
+        destination_minor = destination_major.scaleb(to_precision).to_integral_exact()
+        return int(destination_minor)
+
+    def _fingerprint(self, payload: dict[str, object]) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _payment_fingerprint(
+        self,
+        *,
+        payment_type: str,
+        sender_id: int,
+        receiver_id: int,
+        send_amount: int,
+        fx_rate: str | None = None,
+        fx_clearing_usd_id: int | None = None,
+        fx_clearing_eur_id: int | None = None,
+    ) -> str:
+        payload: dict[str, object] = {
+            "payment_type": payment_type,
+            "sender_id": sender_id,
+            "receiver_id": receiver_id,
+            "send_amount_minor": send_amount,
+        }
+        if fx_rate is not None:
+            payload["fx_rate"] = fx_rate
+        if fx_clearing_usd_id is not None:
+            payload["fx_clearing_usd_id"] = fx_clearing_usd_id
+        if fx_clearing_eur_id is not None:
+            payload["fx_clearing_eur_id"] = fx_clearing_eur_id
+        return self._fingerprint(payload)
+
+    def _detach_transaction(self, session: Session, txn: Transaction) -> Transaction:
+        _ = [e.account for e in txn.entries]
+        _ = txn.fx_quote_snapshot
+        session.expunge_all()
+        return txn
+
+    def _load_transaction_by_key(self, idempotency_key: str) -> Transaction:
+        with self._session_factory() as session:
+            txn = (
+                session.query(Transaction)
+                .filter(Transaction.idempotency_key == idempotency_key)
+                .one()
+            )
+            return self._detach_transaction(session, txn)
+
+    def _handle_existing_idempotency(
+        self,
+        session: Session,
+        existing: Transaction,
+        fingerprint: str,
+    ) -> Transaction:
+        if existing.request_fingerprint == fingerprint:
+            return self._detach_transaction(session, existing)
+
+        raise IdempotencyConflictError(
+            f"Idempotency key '{existing.idempotency_key}' was already used "
+            "for a different payment request."
+        )
+
+    def _recover_idempotent_integrity_error(
+        self,
+        idempotency_key: str,
+        fingerprint: str,
+        exc: IntegrityError,
+    ) -> Transaction:
+        with self._session_factory() as session:
+            existing = (
+                session.query(Transaction)
+                .filter(Transaction.idempotency_key == idempotency_key)
+                .first()
+            )
+            if existing is not None:
+                if existing.request_fingerprint == fingerprint:
+                    return self._detach_transaction(session, existing)
+                raise IdempotencyConflictError(
+                    f"Idempotency key '{idempotency_key}' was already used "
+                    "for a different payment request."
+                ) from exc
+        raise exc
+
+    def _verify_transaction_balanced_by_currency(self, session: Session, transaction_id: int) -> bool:
+        rows = session.execute(
+            text("""
+                SELECT
+                    a.currency,
+                    COALESCE(SUM(
+                        CASE WHEN e.direction = 'DEBIT'  THEN e.amount
+                             WHEN e.direction = 'CREDIT' THEN -e.amount
+                        END
+                    ), 0) AS net
+                FROM entries e
+                JOIN accounts a ON a.id = e.account_id
+                WHERE e.transaction_id = :tid
+                GROUP BY a.currency
+                HAVING COALESCE(SUM(
+                    CASE WHEN e.direction = 'DEBIT'  THEN e.amount
+                         WHEN e.direction = 'CREDIT' THEN -e.amount
+                    END
+                ), 0) != 0
+            """),
+            {"tid": transaction_id},
+        ).fetchall()
+
+        if rows:
+            details = ", ".join(f"{row[0]}={row[1]}" for row in rows)
+            raise InvariantViolationError(
+                f"Transaction {transaction_id} is not balanced by currency: {details}."
+            )
+        return True
+
+    def get_currency_invariant_balances(self) -> dict[str, int]:
+        """Return signed ledger net by account currency."""
+        with self._session_factory() as session:
+            rows = session.execute(
+                text("""
+                    SELECT
+                        a.currency,
+                        COALESCE(SUM(
+                            CASE WHEN e.direction = 'DEBIT'  THEN e.amount
+                                 WHEN e.direction = 'CREDIT' THEN -e.amount
+                            END
+                        ), 0) AS net
+                    FROM accounts a
+                    LEFT JOIN entries e ON e.account_id = a.id
+                    GROUP BY a.currency
+                    ORDER BY a.currency
+                """)
+            ).fetchall()
+        return {str(row[0]): int(row[1]) for row in rows}
+
+    def get_transaction_currency_imbalances(self) -> list[dict[str, int | str]]:
+        """Return transaction-level currency imbalances across the ledger."""
+        with self._session_factory() as session:
+            rows = session.execute(
+                text("""
+                    SELECT
+                        e.transaction_id,
+                        a.currency,
+                        COALESCE(SUM(
+                            CASE WHEN e.direction = 'DEBIT'  THEN e.amount
+                                 WHEN e.direction = 'CREDIT' THEN -e.amount
+                            END
+                        ), 0) AS net
+                    FROM entries e
+                    JOIN accounts a ON a.id = e.account_id
+                    GROUP BY e.transaction_id, a.currency
+                    HAVING COALESCE(SUM(
+                        CASE WHEN e.direction = 'DEBIT'  THEN e.amount
+                             WHEN e.direction = 'CREDIT' THEN -e.amount
+                        END
+                    ), 0) != 0
+                    ORDER BY e.transaction_id, a.currency
+                """)
+            ).fetchall()
+        return [
+            {
+                "transaction_id": int(row[0]),
+                "currency": str(row[1]),
+                "net": int(row[2]),
+            }
+            for row in rows
+        ]
+
     # ── cross-currency payment ───────────────────────────────────────────
 
     def execute_cross_currency_payment(
@@ -148,7 +393,7 @@ class LedgerEngine:
         sender_id: int,
         receiver_id: int,
         send_amount: int,
-        fx_rate: float,
+        fx_rate: str | Decimal,
         idempotency_key: str,
         *,
         fx_clearing_usd_id: int,
@@ -180,7 +425,7 @@ class LedgerEngine:
         sender_id         : int   – Account ID of the payer.
         receiver_id       : int   – Account ID of the payee.
         send_amount       : int   – Amount in sender's minor currency units.
-        fx_rate           : float – Conversion multiplier.
+        fx_rate           : str | Decimal – Conversion multiplier snapshot.
         idempotency_key   : str   – Unique caller-supplied dedup token.
         fx_clearing_usd_id: int   – FX Clearing account ID for sender currency.
         fx_clearing_eur_id: int   – FX Clearing account ID for receiver currency.
@@ -192,7 +437,7 @@ class LedgerEngine:
 
         Raises
         ------
-        DuplicateTransactionError  – idempotency_key already consumed.
+        IdempotencyConflictError   – idempotency_key reused for a different request.
         InsufficientFundsError     – Sender cannot cover the send_amount.
         ConcurrencyConflictError   – OCC version conflict detected.
         """
@@ -219,7 +464,7 @@ class LedgerEngine:
         sender_id: int,
         receiver_id: int,
         send_amount: int,
-        fx_rate: float,
+        fx_rate: str | Decimal,
         idempotency_key: str,
         *,
         fx_clearing_usd_id: int,
@@ -227,6 +472,23 @@ class LedgerEngine:
         locking_strategy: str = "PESSIMISTIC",
     ) -> Transaction:
         """Inner implementation — separated so StaleDataError propagates."""
+        send_amount = self._validate_send_amount(send_amount)
+        locking_strategy = self._validate_locking_strategy(locking_strategy)
+
+        rate_decimal, rate_text, normalized_rate = self._normalize_decimal_input(
+            fx_rate,
+            "fx_rate",
+        )
+        fingerprint = self._payment_fingerprint(
+            payment_type="cross_currency",
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            send_amount=send_amount,
+            fx_rate=normalized_rate,
+            fx_clearing_usd_id=fx_clearing_usd_id,
+            fx_clearing_eur_id=fx_clearing_eur_id,
+        )
+
         with self._session_factory() as session:
             try:
                 # For PESSIMISTIC on SQLite: BEGIN IMMEDIATE acquires a
@@ -245,11 +507,7 @@ class LedgerEngine:
                     .first()
                 )
                 if existing is not None:
-                    raise DuplicateTransactionError(
-                        f"Transaction with idempotency_key "
-                        f"'{idempotency_key}' already exists "
-                        f"(txn_id={existing.id})."
-                    )
+                    return self._handle_existing_idempotency(session, existing, fingerprint)
 
                 # ── Step 2: Concurrency control & Existence check ────
                 if locking_strategy == "PESSIMISTIC":
@@ -274,14 +532,31 @@ class LedgerEngine:
                     raise ValueError(f"FX Clearing USD account {fx_clearing_usd_id} does not exist.")
                 if not fx_eur_acct:
                     raise ValueError(f"FX Clearing EUR account {fx_clearing_eur_id} does not exist.")
+                if fx_usd_acct.currency != sender_acct.currency:
+                    raise ValueError(
+                        "FX clearing account currency mismatch: source "
+                        f"clearing account is {fx_usd_acct.currency}, "
+                        f"sender account is {sender_acct.currency}."
+                    )
+                if fx_eur_acct.currency != receiver_acct.currency:
+                    raise ValueError(
+                        "FX clearing account currency mismatch: destination "
+                        f"clearing account is {fx_eur_acct.currency}, "
+                        f"receiver account is {receiver_acct.currency}."
+                    )
 
-                # ── Step 3: FX conversion (integer arithmetic) ──────
-                recv_amount = round(send_amount * fx_rate)
+                # ── Step 3: FX conversion (Decimal + explicit rounding) ──────
+                recv_amount = self._convert_minor_units(
+                    send_amount,
+                    from_currency=sender_acct.currency,
+                    to_currency=receiver_acct.currency,
+                    rate=rate_decimal,
+                )
                 if recv_amount <= 0:
                     raise ValueError(
                         f"Converted receive amount must be positive, "
                         f"got {recv_amount} "
-                        f"(send={send_amount}, rate={fx_rate})."
+                        f"(send={send_amount}, rate={rate_text})."
                     )
 
                 # ── Step 4: Sufficient-funds check on sender ────────
@@ -311,9 +586,11 @@ class LedgerEngine:
                     description=(
                         f"Cross-currency payment: Account {sender_id} → "
                         f"Account {receiver_id} | "
-                        f"{send_amount} minor units @ FX {fx_rate}"
+                        f"{send_amount} minor units @ FX {rate_text}"
                     ),
                     idempotency_key=idempotency_key,
+                    request_fingerprint=fingerprint,
+                    transaction_type=TransactionType.PAYMENT,
                 )
                 session.add(txn)
                 session.flush()  # Materialize txn.id for FK references
@@ -350,6 +627,17 @@ class LedgerEngine:
                 )
 
                 session.add_all([entry_1a, entry_1b, entry_2a, entry_2b])
+                session.add(FxQuoteSnapshot(
+                    transaction_id=txn.id,
+                    from_currency=sender_acct.currency,
+                    to_currency=receiver_acct.currency,
+                    rate=rate_text,
+                    rounding_mode=ROUNDING_MODE,
+                    source_amount_minor=send_amount,
+                    destination_amount_minor=recv_amount,
+                ))
+                session.flush()
+                self._verify_transaction_balanced_by_currency(session, txn.id)
 
                 # ── Step 7: OCC version touch ───────────────────────
                 # For OCC, force a version_id bump on the Account rows.
@@ -360,20 +648,146 @@ class LedgerEngine:
                     flag_modified(fx_eur_acct, "name")
 
                 session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                return self._recover_idempotent_integrity_error(
+                    idempotency_key,
+                    fingerprint,
+                    exc,
+                )
             except Exception:
                 session.rollback()
                 raise
 
-        # Return a detached-but-populated object for the caller.
-        with self._session_factory() as session:
-            txn = (
-                session.query(Transaction)
-                .filter(Transaction.idempotency_key == idempotency_key)
-                .one()
+        return self._load_transaction_by_key(idempotency_key)
+
+    def execute_same_currency_payment(
+        self,
+        sender_id: int,
+        receiver_id: int,
+        send_amount: int,
+        idempotency_key: str,
+        *,
+        locking_strategy: str = "PESSIMISTIC",
+    ) -> Transaction:
+        """Execute a two-leg transfer between accounts in the same currency."""
+        try:
+            return self._execute_same_currency_payment_inner(
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+                send_amount=send_amount,
+                idempotency_key=idempotency_key,
+                locking_strategy=locking_strategy,
             )
-            _ = [e.account for e in txn.entries]
-            session.expunge_all()
-            return txn
+        except StaleDataError:
+            raise ConcurrencyConflictError(
+                "OCC conflict: Account version_id was modified by a "
+                "concurrent transaction. Retry with a fresh read."
+            )
+
+    def _execute_same_currency_payment_inner(
+        self,
+        sender_id: int,
+        receiver_id: int,
+        send_amount: int,
+        idempotency_key: str,
+        *,
+        locking_strategy: str = "PESSIMISTIC",
+    ) -> Transaction:
+        send_amount = self._validate_send_amount(send_amount)
+        locking_strategy = self._validate_locking_strategy(locking_strategy)
+
+        fingerprint = self._payment_fingerprint(
+            payment_type="same_currency",
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            send_amount=send_amount,
+        )
+
+        with self._session_factory() as session:
+            try:
+                if locking_strategy == "PESSIMISTIC":
+                    session.connection(execution_options={"sqlite_begin_immediate": True})
+                else:
+                    session.begin()
+
+                existing = (
+                    session.query(Transaction)
+                    .filter(Transaction.idempotency_key == idempotency_key)
+                    .first()
+                )
+                if existing is not None:
+                    return self._handle_existing_idempotency(session, existing, fingerprint)
+
+                if locking_strategy == "PESSIMISTIC":
+                    sender_acct = session.get(Account, sender_id, with_for_update=True)
+                    receiver_acct = session.get(Account, receiver_id, with_for_update=True)
+                else:
+                    sender_acct = session.get(Account, sender_id)
+                    receiver_acct = session.get(Account, receiver_id)
+
+                if not sender_acct:
+                    raise ValueError(f"Sender account {sender_id} does not exist.")
+                if not receiver_acct:
+                    raise ValueError(f"Receiver account {receiver_id} does not exist.")
+                if sender_acct.currency != receiver_acct.currency:
+                    raise ValueError(
+                        "Same-currency payment requires sender and receiver "
+                        "accounts to share a currency."
+                    )
+
+                sender_balance = self._get_account_balance(session, sender_id)
+                if sender_balance < send_amount:
+                    raise InsufficientFundsError(
+                        f"Account {sender_id} has balance {sender_balance} "
+                        f"minor units but tried to send {send_amount}."
+                    )
+
+                txn = Transaction(
+                    description=(
+                        f"Same-currency payment: Account {sender_id} → "
+                        f"Account {receiver_id} | {send_amount} minor units"
+                    ),
+                    idempotency_key=idempotency_key,
+                    request_fingerprint=fingerprint,
+                    transaction_type=TransactionType.PAYMENT,
+                )
+                session.add(txn)
+                session.flush()
+                session.add_all([
+                    Entry(
+                        transaction_id=txn.id,
+                        account_id=sender_id,
+                        amount=send_amount,
+                        direction=EntryDirection.CREDIT,
+                    ),
+                    Entry(
+                        transaction_id=txn.id,
+                        account_id=receiver_id,
+                        amount=send_amount,
+                        direction=EntryDirection.DEBIT,
+                    ),
+                ])
+                session.flush()
+                self._verify_transaction_balanced_by_currency(session, txn.id)
+
+                if locking_strategy == "OCC" and sender_acct and receiver_acct:
+                    flag_modified(sender_acct, "name")
+                    flag_modified(receiver_acct, "name")
+
+                session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                return self._recover_idempotent_integrity_error(
+                    idempotency_key,
+                    fingerprint,
+                    exc,
+                )
+            except Exception:
+                session.rollback()
+                raise
+
+        return self._load_transaction_by_key(idempotency_key)
 
     # ── transaction reversal ─────────────────────────────────────────
 
@@ -462,6 +876,8 @@ class LedgerEngine:
                         f"{original.description}"
                     ),
                     idempotency_key=rev_key,
+                    transaction_type=TransactionType.REVERSAL,
+                    reversed_transaction_id=original.id,
                 )
                 session.add(rev_txn)
                 session.flush()
@@ -479,6 +895,8 @@ class LedgerEngine:
                         amount=entry.amount,
                         direction=flipped_direction,
                     ))
+                session.flush()
+                self._verify_transaction_balanced_by_currency(session, rev_txn.id)
 
         # Return detached reversal transaction
         with self._session_factory() as session:
@@ -495,8 +913,9 @@ class LedgerEngine:
 
     def verify_system_invariants(self) -> bool:
         """
-        Assert the fundamental accounting identity across the entire ledger:
+        Assert the accounting identity independently for each currency:
 
+            For every currency:
             Σ  DEBIT amounts  −  Σ  CREDIT amounts  ==  0
 
         This must hold at all times in a correctly-operating double-entry
@@ -510,22 +929,29 @@ class LedgerEngine:
         ------
         InvariantViolationError – If the global sum is not zero.
         """
-        with self._session_factory() as session:
-            global_sum = session.execute(
-                text("""
-                    SELECT COALESCE(SUM(
-                        CASE WHEN direction = 'DEBIT'  THEN amount
-                             WHEN direction = 'CREDIT' THEN -amount
-                        END
-                    ), 0) AS net
-                    FROM entries
-                """)
-            ).scalar()
-
-        if global_sum != 0:
+        transaction_imbalances = self.get_transaction_currency_imbalances()
+        if transaction_imbalances:
+            details = ", ".join(
+                f"txn {row['transaction_id']} {row['currency']}={row['net']}"
+                for row in transaction_imbalances
+            )
             raise InvariantViolationError(
-                f"CRITICAL: Global ledger imbalance detected! "
-                f"Net = {global_sum} (expected 0)."
+                f"Transaction-level currency imbalances detected: {details}."
+            )
+
+        imbalances = {
+            currency: net
+            for currency, net in self.get_currency_invariant_balances().items()
+            if net != 0
+        }
+
+        if imbalances:
+            details = ", ".join(
+                f"{currency}={net}" for currency, net in sorted(imbalances.items())
+            )
+            raise InvariantViolationError(
+                f"Ledger imbalance detected by currency: {details}. "
+                "Every currency must independently net to zero."
             )
         return True
 
@@ -693,11 +1119,11 @@ def print_entries_table(session_factory: sessionmaker) -> None:
 def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
     """
     Drop all tables, recreate them, and seed initial account data using
-    strictly append-only equity journal entries.
+    append-only equity journal entries.
 
     No ``DELETE`` or destructive ``UPDATE`` statements are issued against
-    ledger rows.  All seed funding flows through a System Equity account
-    to maintain the double-entry invariant.
+    ledger rows.  Seed funding flows through currency-specific System
+    Equity accounts so USD and EUR balances cannot net against each other.
 
     Returns a dict mapping logical names to account IDs for convenience.
 
@@ -707,14 +1133,22 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
     2. User 2 (EUR)  – starts at €0.00.
     3. FX Clearing (USD) – pre-funded with $1 000 000.00 liquidity.
     4. FX Clearing (EUR) – pre-funded with €1 000 000.00 liquidity.
-    5. System Equity (MULTI) – the funding source for all seed capital.
+    5. System Equity (USD) – funding source for USD seed capital.
+    6. System Equity (EUR) – funding source for EUR seed capital.
 
     The FX Clearing accounts simulate a corporate treasury pool that
     enables instant cross-currency settlement.
     """
-    # Wipe and recreate schema (DDL — not row deletion)
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    # Wipe and recreate schema (DDL — not row deletion). SQLite needs FK
+    # checks disabled for self-referential/drop-order DDL, then re-enabled
+    # before any seed data is inserted.
+    with engine.begin() as connection:
+        if engine.dialect.name == "sqlite":
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF;")
+        Base.metadata.drop_all(connection)
+        Base.metadata.create_all(connection)
+        if engine.dialect.name == "sqlite":
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON;")
 
     with session_factory() as session:
         with session.begin():
@@ -739,24 +1173,30 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 currency="EUR",
                 type=AccountType.CORPORATE_FX_CLEARING,
             )
-            equity = Account(
-                name="System Equity (Seed)",
-                currency="MULTI",
+            equity_usd = Account(
+                name="System Equity (USD)",
+                currency="USD",
                 type=AccountType.CORPORATE_FX_CLEARING,
             )
-            session.add_all([user1, user2, fx_usd, fx_eur, equity])
+            equity_eur = Account(
+                name="System Equity (EUR)",
+                currency="EUR",
+                type=AccountType.CORPORATE_FX_CLEARING,
+            )
+            session.add_all([user1, user2, fx_usd, fx_eur, equity_usd, equity_eur])
             session.flush()  # Materialize IDs
 
             # ── Seed funding transactions (append-only) ──────────────
-            # All funding flows through the System Equity account.
+            # All funding flows through currency-specific System Equity accounts.
             # Each transaction is a balanced pair of entries:
             #   DEBIT  recipient  (funds in)
-            #   CREDIT equity     (funds out of equity pool)
+            #   CREDIT equity     (funds out of same-currency equity pool)
 
             # Fund User 1 with $100.00
             fund_user1_txn = Transaction(
                 description="Initial funding: Alice receives $100.00",
                 idempotency_key="SEED_FUND_USER1",
+                transaction_type=TransactionType.SEED,
             )
             session.add(fund_user1_txn)
             session.flush()
@@ -770,16 +1210,21 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 ),
                 Entry(
                     transaction_id=fund_user1_txn.id,
-                    account_id=equity.id,
+                    account_id=equity_usd.id,
                     amount=10_000,
                     direction=EntryDirection.CREDIT,
                 ),
             ])
+            LedgerEngine(session_factory)._verify_transaction_balanced_by_currency(
+                session,
+                fund_user1_txn.id,
+            )
 
             # Capitalise FX Clearing USD pool — $1,000,000.00
             cap_usd_txn = Transaction(
                 description="Treasury capitalisation: FX Clearing USD",
                 idempotency_key="SEED_CAP_FX_USD",
+                transaction_type=TransactionType.SEED,
             )
             session.add(cap_usd_txn)
             session.flush()
@@ -793,16 +1238,21 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 ),
                 Entry(
                     transaction_id=cap_usd_txn.id,
-                    account_id=equity.id,
+                    account_id=equity_usd.id,
                     amount=100_000_000,
                     direction=EntryDirection.CREDIT,
                 ),
             ])
+            LedgerEngine(session_factory)._verify_transaction_balanced_by_currency(
+                session,
+                cap_usd_txn.id,
+            )
 
             # Capitalise FX Clearing EUR pool — €1,000,000.00
             cap_eur_txn = Transaction(
                 description="Treasury capitalisation: FX Clearing EUR",
                 idempotency_key="SEED_CAP_FX_EUR",
+                transaction_type=TransactionType.SEED,
             )
             session.add(cap_eur_txn)
             session.flush()
@@ -816,11 +1266,15 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
                 ),
                 Entry(
                     transaction_id=cap_eur_txn.id,
-                    account_id=equity.id,
+                    account_id=equity_eur.id,
                     amount=100_000_000,
                     direction=EntryDirection.CREDIT,
                 ),
             ])
+            LedgerEngine(session_factory)._verify_transaction_balanced_by_currency(
+                session,
+                cap_eur_txn.id,
+            )
 
         # Return a map of logical names → account IDs
         return {  # type: ignore
@@ -828,7 +1282,8 @@ def bootstrap_database(engine, session_factory: sessionmaker) -> dict[str, int]:
             "user2": user2.id,
             "fx_usd": fx_usd.id,
             "fx_eur": fx_eur.id,
-            "equity": equity.id,
+            "equity_usd": equity_usd.id,
+            "equity_eur": equity_eur.id,
         }
 
 
@@ -850,7 +1305,7 @@ def main() -> None:
     7. Demonstrate overdraft protection.
     """
     print(f"\n{BOLD}{'═' * 72}{RESET}")
-    print(f"{BOLD}  DOUBLE-ENTRY PAYMENT LEDGER ENGINE — SANDBOX SIMULATION{RESET}")
+    print(f"{BOLD}  DOUBLE-ENTRY PAYMENT LEDGER SIMULATOR{RESET}")
     print(f"{BOLD}{'═' * 72}{RESET}")
     print(f"{DIM}  Database: {DB_PATH}{RESET}")
 
@@ -887,9 +1342,16 @@ def main() -> None:
 
     # ── 3. Execute cross-currency payment ────────────────────────────
     print_header("EXECUTING CROSS-CURRENCY PAYMENT")
-    FX_RATE_USD_TO_EUR = 0.92  # 1 USD = 0.92 EUR
+    FX_RATE_USD_TO_EUR = "0.92"  # 1 USD = 0.92 EUR
     SEND_AMOUNT = 5_000  # $50.00 in cents
     IDEM_KEY = "PAY-20260605-001"
+    rate_decimal, _, _ = ledger._normalize_decimal_input(FX_RATE_USD_TO_EUR, "fx_rate")
+    expected_receive = ledger._convert_minor_units(
+        SEND_AMOUNT,
+        from_currency="USD",
+        to_currency="EUR",
+        rate=rate_decimal,
+    )
 
     print(f"  Sender  : Alice (User 1) — Account #{ids['user1']}")
     print(f"  Receiver: Bob   (User 2) — Account #{ids['user2']}")
@@ -897,7 +1359,7 @@ def main() -> None:
     print(f"  FX Rate : 1 USD = {FX_RATE_USD_TO_EUR} EUR")
     print(
         f"  Expected: Bob receives "
-        f"{_fmt_amount(round(SEND_AMOUNT * FX_RATE_USD_TO_EUR), 'EUR')}"
+        f"{_fmt_amount(expected_receive, 'EUR')}"
     )
     print(f"  Idem Key: {IDEM_KEY}")
 
@@ -923,8 +1385,10 @@ def main() -> None:
 
     try:
         ledger.verify_system_invariants()
-        print(f"  {GREEN}✓ PASS: Global ledger balance = 0 "
-              f"(Σ debits == Σ credits){RESET}")
+        print(
+            f"  {GREEN}✓ PASS: Ledger balances independently per currency "
+            f"(Σ debits == Σ credits for each currency){RESET}"
+        )
     except InvariantViolationError as e:
         print(f"  {RED}✗ FAIL: {e}{RESET}")
         sys.exit(1)
@@ -936,15 +1400,15 @@ def main() -> None:
         print(f"  {RED}✗ FAIL: {e}{RESET}")
         sys.exit(1)
 
-    # ── 6. Duplicate transaction attempt ─────────────────────────────
-    print_header("IDEMPOTENCY TEST — DUPLICATE PAYMENT ATTEMPT")
+    # ── 6. Idempotent retry attempt ─────────────────────────────────
+    print_header("IDEMPOTENCY TEST — SAME-PAYLOAD RETRY")
     print(
         f"  {YELLOW}▸ Re-submitting payment with same idempotency key: "
         f"'{IDEM_KEY}'{RESET}"
     )
 
     try:
-        ledger.execute_cross_currency_payment(
+        retry_txn = ledger.execute_cross_currency_payment(
             sender_id=ids["user1"],
             receiver_id=ids["user2"],
             send_amount=SEND_AMOUNT,
@@ -953,12 +1417,16 @@ def main() -> None:
             fx_clearing_usd_id=ids["fx_usd"],
             fx_clearing_eur_id=ids["fx_eur"],
         )
-        # Should never reach here
-        print(f"  {RED}✗ FAIL: Duplicate was NOT rejected!{RESET}")
+        if retry_txn.id != txn.id:
+            print(f"  {RED}✗ FAIL: Retry returned a different transaction!{RESET}")
+            sys.exit(1)
+        print(
+            f"  {GREEN}✓ PASS: Retry returned original transaction "
+            f"#{txn.id} without double-posting.{RESET}"
+        )
+    except IdempotencyConflictError as e:
+        print(f"  {RED}✗ FAIL: Same-payload retry conflicted: {e}{RESET}")
         sys.exit(1)
-    except DuplicateTransactionError as e:
-        print(f"  {GREEN}✓ PASS: Duplicate correctly rejected.{RESET}")
-        print(f"  {DIM}  Error: {e}{RESET}")
 
     # ── 7. Overdraft protection test ─────────────────────────────────
     print_header("OVERDRAFT PROTECTION TEST")
@@ -990,7 +1458,7 @@ def main() -> None:
 
     # ── Summary ──────────────────────────────────────────────────────
     print(f"\n{BOLD}{'═' * 72}{RESET}")
-    print(f"{GREEN}{BOLD}  ALL CHECKS PASSED — LEDGER ENGINE OPERATING CORRECTLY{RESET}")
+    print(f"{GREEN}{BOLD}  ALL SIMULATION CHECKS PASSED{RESET}")
     print(f"{BOLD}{'═' * 72}{RESET}\n")
 
 

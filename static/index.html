@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ledger Engine — Dashboard</title>
+    <title>Ledger Simulator — Dashboard</title>
     <link rel="stylesheet" href="./style.css?v=13">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2 data-i18n="sbTitle">Payment Terminal</h2>
-                <p data-i18n="sbDesc">Execute cross-currency transfers through the FX clearing engine.</p>
+                <p data-i18n="sbDesc">Simulate cross-currency transfers through the FX clearing engine.</p>
             </div>
 
             <div class="form-section">
@@ -143,8 +143,8 @@
             </div>
 
             <header class="header">
-                <h1 class="display-title" data-i18n="mainTitle">Ledger Engine</h1>
-                <p class="lead-text" data-i18n="mainSubtitle">Double-entry payment ledger · Cross-currency FX clearing · Real-time invariant monitoring</p>
+                <h1 class="display-title" data-i18n="mainTitle">Ledger Simulator</h1>
+                <p class="lead-text" data-i18n="mainSubtitle">Educational double-entry ledger · FX clearing · Currency-aware invariant monitoring</p>
             </header>
 
             <section class="quick-guide" aria-labelledby="quick-guide-title">
@@ -153,7 +153,7 @@
                         <div class="guide-eyebrow" data-i18n="guideEyebrow">Quick guide</div>
                         <h2 id="quick-guide-title" data-i18n="guideTitle">Read the ledger in four moves</h2>
                     </div>
-                    <p data-i18n="guideIntro">Use this as a live audit console: configure a backend, send money, then inspect the invariant and legs.</p>
+                    <p data-i18n="guideIntro">Use this as a learning console: configure a backend, send money, then inspect the invariant and legs.</p>
                 </div>
 
                 <div class="guide-grid">
@@ -170,12 +170,12 @@
                     <article class="guide-card accent-danger">
                         <div class="guide-index">03</div>
                         <h3 data-i18n="guideInvariantTitle">Verify</h3>
-                        <p data-i18n="guideInvariantBody">The invariant card should stay balanced while every debit and credit appears in the ledger legs.</p>
+                        <p data-i18n="guideInvariantBody">The invariant card checks each currency independently while every debit and credit appears in the ledger legs.</p>
                     </article>
                     <article class="guide-card accent-warning">
                         <div class="guide-index">04</div>
                         <h3 data-i18n="guideRaceTitle">Stress</h3>
-                        <p data-i18n="guideRaceBody">Switch locking modes and simulate a race to see one double-spend attempt rejected.</p>
+                        <p data-i18n="guideRaceBody">Switch locking modes and simulate a race to see concurrency tradeoffs in the SQLite demo.</p>
                     </article>
                 </div>
             </section>
