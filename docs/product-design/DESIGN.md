@@ -2,13 +2,15 @@
 version: alpha
 name: product-design
 description: |
-  The dashboard is a focused learning console for an educational multi-currency
-  ledger simulator. It pairs a high-contrast black/white canvas with a restrained
-  cobalt-violet accent (`#494fdf`) and semantic colors for ledger state: teal for
-  debit/healthy signals, red for credit/error signals, and orange for pending or
-  race-condition feedback. The design should feel precise, inspectable, and
-  product-quality without implying regulated financial-service capability,
-  compliance coverage, customer scale, or production payment readiness.
+  The product surfaces pair a stark black canvas with the project's
+  cobalt-violet (`#494fdf`) and a wide accent palette of deep, fully-saturated
+  product colours — teal, light-blue, deep pink, light-green, warning orange.
+  The system reads as product-demo visual system: oversized 80px–136px
+  Aeonik Pro display headlines, generous whitespace, photography-led hero
+  bands, and full-width product mockups (cards, phones, terminals) shown as
+  hero objects inside near-black sections. Most surfaces are either black or
+  off-white; pill-shaped buttons and rounded-12/20px content cards carry the
+  product-console feel without crossing into playful territory.
 
 colors:
   primary: "#494fdf"
@@ -49,45 +51,45 @@ colors:
 
 typography:
   display-xxl:
-    fontFamily: Inter Tight
-    fontSize: 96px
-    fontWeight: 600
+    fontFamily: Aeonik Pro
+    fontSize: 136px
+    fontWeight: 500
     lineHeight: 1.0
-    letterSpacing: -1.92px
+    letterSpacing: -2.72px
   display-xl:
-    fontFamily: Inter Tight
-    fontSize: 64px
-    fontWeight: 600
+    fontFamily: Aeonik Pro
+    fontSize: 80px
+    fontWeight: 500
     lineHeight: 1.0
-    letterSpacing: -0.64px
+    letterSpacing: -0.8px
   display-lg:
-    fontFamily: Inter Tight
+    fontFamily: Aeonik Pro
     fontSize: 48px
-    fontWeight: 600
-    lineHeight: 1.12
+    fontWeight: 500
+    lineHeight: 1.21
     letterSpacing: -0.48px
   display-md:
-    fontFamily: Inter Tight
+    fontFamily: Aeonik Pro
     fontSize: 40px
-    fontWeight: 600
-    lineHeight: 1.15
+    fontWeight: 500
+    lineHeight: 1.2
     letterSpacing: -0.4px
   heading-lg:
-    fontFamily: Inter Tight
+    fontFamily: Aeonik Pro
     fontSize: 32px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.19
     letterSpacing: -0.32px
   heading-md:
-    fontFamily: Inter Tight
+    fontFamily: Aeonik Pro
     fontSize: 24px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.33
     letterSpacing: 0
   heading-sm:
-    fontFamily: Inter Tight
+    fontFamily: Aeonik Pro
     fontSize: 20px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.4
     letterSpacing: 0
   body-lg:
@@ -95,35 +97,35 @@ typography:
     fontSize: 18px
     fontWeight: 400
     lineHeight: 1.56
-    letterSpacing: 0
+    letterSpacing: -0.09px
   body-md:
     fontFamily: Inter
     fontSize: 16px
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: 0
+    letterSpacing: 0.24px
   body-md-bold:
     fontFamily: Inter
     fontSize: 16px
     fontWeight: 600
     lineHeight: 1.5
-    letterSpacing: 0
+    letterSpacing: 0.16px
   body-sm:
     fontFamily: Inter
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.43
   button-lg:
-    fontFamily: Inter Tight
-    fontSize: 18px
-    fontWeight: 600
+    fontFamily: Aeonik Pro
+    fontSize: 20px
+    fontWeight: 500
     lineHeight: 1.4
   button-md:
     fontFamily: Inter
     fontSize: 16px
     fontWeight: 600
     lineHeight: 1.5
-    letterSpacing: 0
+    letterSpacing: 0.24px
   button-sm:
     fontFamily: Inter
     fontSize: 14px
@@ -134,11 +136,12 @@ typography:
     fontSize: 13px
     fontWeight: 400
     lineHeight: 1.4
-  mono:
-    fontFamily: ui-monospace
-    fontSize: 13px
-    fontWeight: 500
-    lineHeight: 1.45
+  link-emph:
+    fontFamily: Inter
+    fontSize: 16px
+    fontWeight: 700
+    lineHeight: 1.5
+    letterSpacing: 0.24px
 
 rounded:
   none: 0px
@@ -163,52 +166,52 @@ spacing:
 
 components:
   button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.canvas-dark}"
     typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-    padding: 14px 20px
+    rounded: "{rounded.full}"
+    padding: 14px 28px
     height: 48px
   button-primary-pressed:
-    backgroundColor: "{colors.primary-deep}"
-    textColor: "{colors.on-primary}"
+    backgroundColor: "{colors.faint}"
+    textColor: "{colors.canvas-dark}"
     typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-  button-secondary:
+    rounded: "{rounded.full}"
+  button-dark:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.button-md}"
+    rounded: "{rounded.full}"
+    padding: 14px 28px
+    height: 48px
+  button-soft:
     backgroundColor: "{colors.surface-soft}"
     textColor: "{colors.ink}"
     typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-    padding: 14px 20px
+    rounded: "{rounded.full}"
+    padding: 14px 28px
     height: 48px
-  button-danger:
-    backgroundColor: "{colors.accent-danger}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-    padding: 14px 20px
-    height: 48px
-  button-warning:
-    backgroundColor: "{colors.accent-warning}"
-    textColor: "{colors.canvas-dark}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-    padding: 14px 20px
-    height: 48px
-  button-outline:
-    backgroundColor: transparent
+  button-outline-light:
+    backgroundColor: "{colors.canvas-light}"
     textColor: "{colors.ink}"
     typography: "{typography.button-md}"
-    rounded: "{rounded.md}"
-    padding: 13px 19px
+    rounded: "{rounded.full}"
+    padding: 13px 27px
     height: 48px
-  button-icon:
+  button-outline-dark:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.button-md}"
+    rounded: "{rounded.full}"
+    padding: 13px 27px
+    height: 48px
+  button-pill-sm:
     backgroundColor: "{colors.surface-soft}"
     textColor: "{colors.ink}"
     typography: "{typography.button-sm}"
     rounded: "{rounded.full}"
-    padding: 10px
-    height: 40px
+    padding: 8px 16px
+    height: 36px
   text-input:
     backgroundColor: "{colors.canvas-light}"
     textColor: "{colors.ink}"
@@ -216,555 +219,418 @@ components:
     rounded: "{rounded.md}"
     padding: 14px 16px
     height: 56px
-  range-input:
-    trackColor: "{colors.hairline-light}"
-    thumbColor: "{colors.primary}"
-    height: 36px
-  sidebar:
-    backgroundColor: "{colors.canvas-light}"
-    textColor: "{colors.ink}"
+  hero-band-dark:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.display-xxl}"
     rounded: "{rounded.none}"
-    width: 320px
-  quick-guide-card:
+    padding: 88px 24px
+  hero-band-photo:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.display-xl}"
+    rounded: "{rounded.none}"
+    padding: 0
+  feature-card-light:
     backgroundColor: "{colors.canvas-light}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.sm}"
-    padding: 16px
-  invariant-card:
-    backgroundColor: "{colors.surface-soft}"
     textColor: "{colors.ink}"
     typography: "{typography.body-md}"
-    rounded: "{rounded.md}"
-    padding: 20px
-  metric-card:
-    backgroundColor: "{colors.canvas-light}"
+    rounded: "{rounded.lg}"
+    padding: 32px
+  feature-card-dark:
+    backgroundColor: "{colors.surface-elevated}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.lg}"
+    padding: 32px
+  option-card:
+    backgroundColor: "{colors.surface-elevated}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.lg}"
+    padding: 32px
+  option-card-featured:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.lg}"
+    padding: 32px
+  product-mockup:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    rounded: "{rounded.xl}"
+    padding: 48px
+  download-tile:
+    backgroundColor: "{colors.surface-soft}"
     textColor: "{colors.ink}"
     typography: "{typography.body-sm}"
     rounded: "{rounded.md}"
-    padding: 18px
-  data-table:
-    backgroundColor: "{colors.canvas-light}"
+    padding: 12px 20px
+    height: 56px
+  badge-tag:
+    backgroundColor: "{colors.surface-soft}"
     textColor: "{colors.ink}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.full}"
+    padding: 4px 12px
+  badge-feature:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.full}"
+    padding: 4px 12px
+  nav-bar:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.button-md}"
+    rounded: "{rounded.none}"
+    height: 64px
+  sub-nav-pill:
+    backgroundColor: "{colors.surface-elevated}"
+    textColor: "{colors.on-dark}"
+    typography: "{typography.button-sm}"
+    rounded: "{rounded.full}"
+    padding: 8px 16px
+  footer:
+    backgroundColor: "{colors.canvas-dark}"
+    textColor: "{colors.on-dark-mute}"
     typography: "{typography.body-sm}"
-    rounded: "{rounded.md}"
-    padding: 0
-  toast:
-    backgroundColor: "{colors.canvas-light}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.md}"
-    padding: 16px 18px
+    rounded: "{rounded.none}"
+    padding: 80px 24px
 ---
-
-# Product Design
-
-## Purpose
-
-This document describes the user-facing dashboard experience for the educational
-multi-currency ledger simulator. It covers visual design, tokens, layout,
-components, interaction behavior, responsive rules, and copy tone.
-
-It does not define accounting behavior or backend safety rules. For those, see
-[../engineering-design/DESIGN.md](../engineering-design/DESIGN.md).
-
-## Scope
-
-The interface is a learning console for exploring:
-
-- double-entry ledger entries
-- cross-currency FX clearing
-- currency-aware invariant checks
-- idempotency behavior
-- reversals
-- SQLite concurrency tradeoffs
-
-The UI should feel precise and credible, but it must not imply that the project
-is real payment infrastructure.
-
-## Copy Safety
-
-Use neutral, demonstrable language:
-
-- "Educational ledger simulator"
-- "Learning console"
-- "Concept demo"
-- "Currency-aware invariant"
-- "FX clearing flow"
-- "SQLite concurrency demo"
-
-Avoid unsupported claims:
-
-- unsupported scale or adoption claims
-- regulated financial-service, compliance, or production-readiness claims
-- copy that implies regulated payment processing
-- marketing statements that describe scale the project does not have
-
-Good heading examples:
-
-- "Ledger Simulator"
-- "Read the ledger in four moves"
-- "Inspect the FX clearing legs"
-- "Verify currency-aware balance"
-- "Simulate a concurrency race"
-
-Avoid headings that imply regulated payment capability, customer scale,
-commercial plans, or production infrastructure.
 
 ## Overview
 
-The dashboard operates in a high-contrast two-mode system: a light operational
-canvas (`{colors.canvas-light}`) for tables, forms, and simulator state, paired
-with a true-black dark mode (`{colors.canvas-dark}`) for users who prefer a
-lower-glare inspection surface. The two modes should feel like the same product:
-quiet, precise, and optimized for reading ledger state.
+The product canvas operates in a high-contrast two-mode system: a
+**near-black storytelling canvas** (`{colors.canvas-dark}` — `#000000`)
+that hosts hero bands, product mockups, and the featured section, alternating
+with **white catalogue bands** (`{colors.canvas-light}` — `#ffffff`) that
+host comparison tables, FAQ rows, and download tiles. The two modes switch
+in full-bleed bands rather than soft transitions; sections slam against each
+other to create the magazine-spread rhythm the visual system uses.
 
-The visual rhythm is not a marketing page. It is an operational workspace with
-enough polish to feel intentional: compact headings, restrained surfaces, crisp
-tables, clear form controls, and visible state feedback.
+The display typography is **Aeonik Pro at weight 500**, used at sizes from
+20px to 136px. The flagship hero ("Simulator Dashboard", "Inspect the Demo
+Flow") sits at 80–136px with `lineHeight: 1.0` and tight negative
+letter-spacing. Body type is **Inter** at weight 400 — open-source,
+no-nonsense, paired with positive tracking (`0.24px`) on UI labels for
+slightly more mechanical precision.
 
-The primary accent is `{colors.primary}` (`#494fdf`). Use it sparingly for
-selected controls, focus, settings affordances, and important accent lines. The
-semantic colors carry ledger meaning:
-
-- `{colors.accent-teal}` for `DEBIT`, healthy invariant states, and success.
-- `{colors.accent-danger}` for `CREDIT`, imbalance, destructive actions, and errors.
-- `{colors.accent-warning}` for pending remote backend wake state and race demos.
+The primary visual accent is `{colors.primary}` (`#494fdf`) — a saturated cobalt
+violet — but it appears scarcely on product surfaces. The actual primary
+CTA on the hero is the **white pill on black** ("Open the Simulator"),
+and the cobalt violet is reserved for featured option cards, secondary CTAs in
+white sections, and the project mark itself. A wide secondary palette of deep
+teal, light-blue, deep-pink, light-green, warning orange, and yellow appears
+inside product mockups and feature illustrations — never as button surfaces.
 
 **Key Characteristics:**
-
-- Two-mode canvas system: white/light for default readability, true black for dark mode.
-- Inter Tight headings plus Inter body/UI text.
-- Dense but readable tables for accounts, transactions, and entry legs.
-- A persistent payment terminal for simulator controls.
-- Cobalt-violet accent used as a deliberate stamp, not a full-page theme.
-- Color communicates ledger state; decoration stays secondary.
+- Two-mode canvas system — `{colors.canvas-dark}` (true black) for storytelling, `{colors.canvas-light}` (white) for browsing — switched in full-bleed bands.
+- Display typography is **Aeonik Pro 500** at sizes 20–136px with tight `lineHeight: 1.0` and large negative letter-spacing on display sizes.
+- The actual primary CTA is `{component.button-primary}` — a **white pill with black text**, sitting on the dark canvas as the brightest pixel. Cobalt-violet `{colors.primary}` is reserved for featured option cards and secondary CTAs.
+- Eight saturated accent colours live inside product mockups and illustrations only, never as button surfaces — teal, light-blue, deep-pink, light-green, warning orange, yellow, brown, danger red.
+- All buttons are pill-shaped (`{rounded.full}`); content cards use `{rounded.lg}` (20px); inputs and small chips use `{rounded.md}` (12px).
+- Photography is product-led — phone mockups, card mockups, terminal mockups — shown full-bleed inside dark sections with no caption overlay.
 
 ## Colors
 
 ### Brand & Accent
-
-- **Cobalt Violet** (`{colors.primary}` — `#494fdf`): the main product accent. Use for primary actions, focus states, selected controls, and short accent bars.
-- **Cobalt Bright** (`{colors.primary-bright}` — `#4f55f1`): dark-mode accent or hover variant.
-- **Cobalt Deep** (`{colors.primary-deep}` — `#3a40c4`): active/pressed state for primary actions.
-- **On-Primary** (`{colors.on-primary}` — `#ffffff`): text on primary surfaces.
+- **Cobalt Violet** (`{colors.primary}` — `#494fdf`): the primary visual accent. Reserved for featured option cards (`{component.option-card-featured}`), the project mark icon, and secondary CTAs in white-canvas regions.
+- **Cobalt Bright** (`{colors.primary-bright}` — `#4f55f1`): a one-step-up bright variant used in inline link colour and accent-photo headers.
+- **Cobalt Deep** (`{colors.primary-deep}` — `#3a40c4`): the active/pressed state of cobalt elements.
+- **On-Primary** (`{colors.on-primary}` — `#ffffff`): label colour on top of `{colors.primary}` surfaces.
 
 ### Surface
-
-- **Canvas Light** (`{colors.canvas-light}` — `#ffffff`): default dashboard background and table surface.
-- **Canvas Dark** (`{colors.canvas-dark}` — `#000000`): dark-mode page background.
-- **Surface Soft** (`{colors.surface-soft}` — `#f4f4f4`): quiet panel and secondary button background.
-- **Surface Card** (`{colors.surface-card}` — `#ffffff`): table and card surface in light mode.
-- **Surface Deep** (`{colors.surface-deep}` — `#0a0a0a`): input and inset surface in dark mode.
-- **Surface Elevated** (`{colors.surface-elevated}` — `#16181a`): dark-mode panel surface.
-- **Hairline Light** (`{colors.hairline-light}` — `#e2e2e7`): 1px dividers in light mode.
-- **Hairline Dark** (`{colors.hairline-dark}` — `rgba(255,255,255,0.12)`): 1px dividers in dark mode.
-- **Hairline Strong** (`{colors.hairline-strong}` — `#191c1f`): high-contrast outlines where a control needs stronger definition.
+- **Canvas Light** (`{colors.canvas-light}` — `#ffffff`): the white catalogue mode for FAQ, download tiles, comparison tables.
+- **Canvas Dark** (`{colors.canvas-dark}` — `#000000`): the storytelling canvas — true black, never near-black.
+- **Surface Soft** (`{colors.surface-soft}` — `#f4f4f4`): a subtle off-white used on download tiles, soft buttons, and inset card groups inside white bands.
+- **Surface Card** (`{colors.surface-card}` — `#ffffff`): pure white card surface, used for feature cards in white-canvas regions.
+- **Surface Deep** (`{colors.surface-deep}` — `#0a0a0a`): a one-step-up dark surface for inset cards inside black-canvas regions.
+- **Surface Elevated** (`{colors.surface-elevated}` — `#16181a`): the featured-section card background — slightly luminous, lifts option cards off the black canvas.
+- **Hairline Light** (`{colors.hairline-light}` — `#e2e2e7`): 1px dividers inside white bands.
+- **Hairline Dark** (`{colors.hairline-dark}` — `rgba(255,255,255,0.12)`): the corresponding low-contrast divider in dark regions.
+- **Hairline Strong** (`{colors.hairline-strong}` — `#191c1f`): structural full-strength dividers and the outline of light cards.
 
 ### Text
-
-- **Ink** (`{colors.ink}` — `#191c1f`): primary text in light mode.
-- **Body** (`{colors.body}` — `#1f2226`): long-form text where ink feels too sharp.
-- **Charcoal** (`{colors.charcoal}` — `#3a3d40`): secondary labels and captions.
-- **Mute** (`{colors.mute}` — `#505a63`): helper text, metadata, table hints.
-- **Ash** (`{colors.ash}` — `#5c5e60`): tertiary text.
-- **Stone** (`{colors.stone}` — `#8d969e`): quiet metadata.
-- **Faint** (`{colors.faint}` — `#c9c9cd`): disabled foreground.
-- **On-Dark** (`{colors.on-dark}` — `#ffffff`): primary text in dark mode.
-- **On-Dark Mute** (`{colors.on-dark-mute}` — `rgba(255,255,255,0.72)`): secondary text in dark mode.
+- **Ink** (`{colors.ink}` — `#191c1f`): primary text colour. Notably warmer than pure black, paired with the white canvas for body legibility.
+- **Body** (`{colors.body}` — `#1f2226`): long-form body where `{colors.ink}` would feel slightly too sharp.
+- **Charcoal** (`{colors.charcoal}` — `#3a3d40`): captions, secondary nav.
+- **Mute** (`{colors.mute}` — `#505a63`): supporting text.
+- **Ash** (`{colors.ash}` — `#5c5e60`): tertiary text, footer copy.
+- **Stone** (`{colors.stone}` — `#8d969e`): metadata, subtle captions.
+- **Faint** (`{colors.faint}` — `#c9c9cd`): disabled foreground, hairline replacements.
+- **On-Dark** (`{colors.on-dark}` — `#ffffff`): primary text on `{colors.canvas-dark}`.
+- **On-Dark Mute** (`{colors.on-dark-mute}` — `rgba(255,255,255,0.72)`): secondary text in dark regions.
 
 ### Semantic
-
-- **Accent Teal** (`{colors.accent-teal}` — `#00a87e`): debit, success, healthy state.
-- **Accent Light Blue** (`{colors.accent-light-blue}` — `#007bc2`): informational state, optional chart or link accent.
-- **Accent Blue Link** (`{colors.accent-blue-link}` — `#376cd5`): default inline link on light surfaces.
-- **Accent Light Green** (`{colors.accent-light-green}` — `#428619`): secondary success signal.
-- **Accent Green Text** (`{colors.accent-green-text}` — `#006400`): compact positive inline text.
-- **Accent Yellow** (`{colors.accent-yellow}` — `#b09000`): caution state.
-- **Accent Warning** (`{colors.accent-warning}` — `#ec7e00`): backend wake, race demo, pending state.
-- **Accent Pink** (`{colors.accent-pink}` — `#e61e49`): optional highlight; avoid using as a default action color.
-- **Accent Danger** (`{colors.accent-danger}` — `#e23b4a`): credit, imbalance, destructive action, error state.
-- **Accent Deep Red** (`{colors.accent-deep-red}` — `#8b0000`): compact error text when danger red needs more contrast.
-- **Accent Brown** (`{colors.accent-brown}` — `#936d62`): rare neutral warmth; use sparingly.
-- **Link** (`{colors.link}` — `#376cd5`): standard inline link.
+- **Accent Teal** (`{colors.accent-teal}` — `#00a87e`): used in product mockup illustrations.
+- **Accent Light Blue** (`{colors.accent-light-blue}` — `#007bc2`): inline link colour in dark photo headers.
+- **Accent Blue Link** (`{colors.accent-blue-link}` — `#376cd5`): default inline link colour on white surfaces.
+- **Accent Light Green** (`{colors.accent-light-green}` — `#428619`): success / positive product callouts.
+- **Accent Green Text** (`{colors.accent-green-text}` — `#006400`): inline success text.
+- **Accent Yellow** (`{colors.accent-yellow}` — `#b09000`): caution / pending state in product mockups.
+- **Accent Warning** (`{colors.accent-warning}` — `#ec7e00`): full-saturation orange used in warning illustrations.
+- **Accent Pink** (`{colors.accent-pink}` — `#e61e49`): deep pink — used inside product photography and category iconography.
+- **Accent Danger** (`{colors.accent-danger}` — `#e23b4a`): destructive / error state.
+- **Accent Deep Red** (`{colors.accent-deep-red}` — `#8b0000`): inline error text.
+- **Accent Brown** (`{colors.accent-brown}` — `#936d62`): a single warm-neutral used in card chrome and supporting mockups.
+- **Link** (`{colors.link}` — `#376cd5`): default inline link colour. Same as `{colors.accent-blue-link}`.
 
 ## Typography
 
 ### Font Family
 
-The system uses a two-family stack:
+The system ships a two-family stack:
 
-- **Inter Tight** — used for display headings and compact section titles.
-- **Inter** — used for body text, controls, captions, tables, and metadata.
+- **Aeonik Pro** — proprietary humanist sans-serif used for all display sizes (20px+) at weight 500. Carries the project's editorial confidence; tightens dramatically with negative letter-spacing at large sizes.
+- **Inter** — open-source workhorse for body, button labels, captions, and metadata. Always at weight 400 or 600, with positive tracking (`0.16–0.24px`) on UI labels.
 
-These are available through Google Fonts in the current static dashboard. If
-fonts fail to load, fall back to `system-ui, sans-serif`.
+When Aeonik Pro cannot be licensed, **Inter Display**, **General Sans**, or **Söhne** are credible substitutes — all share the warm geometric character. Apply -1% letter-spacing on display sizes to match the original tightness.
 
 ### Hierarchy
 
 | Token | Size | Weight | Line Height | Letter Spacing | Use |
-|---|---:|---:|---:|---:|---|
-| `{typography.display-xxl}` | 96px | 600 | 1.0 | -1.92px | Rare full-viewport explanatory hero if one is ever added. |
-| `{typography.display-xl}` | 64px | 600 | 1.0 | -0.64px | Major section opener outside the dense dashboard shell. |
-| `{typography.display-lg}` | 48px | 600 | 1.12 | -0.48px | Large dashboard or report title. |
-| `{typography.display-md}` | 40px | 600 | 1.15 | -0.4px | Main dashboard title when space allows. |
-| `{typography.heading-lg}` | 32px | 600 | 1.19 | -0.32px | Major panel heading. |
-| `{typography.heading-md}` | 24px | 600 | 1.33 | 0 | Quick guide and table section headings. |
-| `{typography.heading-sm}` | 20px | 600 | 1.4 | 0 | Sidebar or component heading. |
-| `{typography.body-lg}` | 18px | 400 | 1.56 | 0 | Introductory explanatory copy. |
-| `{typography.body-md}` | 16px | 400 | 1.5 | 0 | Default body, form controls. |
-| `{typography.body-md-bold}` | 16px | 600 | 1.5 | 0 | Emphasis and table values. |
-| `{typography.body-sm}` | 14px | 400 | 1.43 | 0 | Helper text, table rows, metadata. |
-| `{typography.button-lg}` | 18px | 600 | 1.4 | 0 | Primary large button label. |
-| `{typography.button-md}` | 16px | 600 | 1.5 | 0 | Default button label. |
-| `{typography.button-sm}` | 14px | 600 | 1.43 | 0 | Compact action or chip. |
-| `{typography.caption}` | 13px | 400 | 1.4 | 0 | Footer, helper text, status captions. |
-| `{typography.mono}` | 13px | 500 | 1.45 | 0 | Idempotency keys, transaction IDs, compact code-like values. |
+|---|---|---|---|---|---|
+| `{typography.display-xxl}` | 136px | 500 | 1.0 | -2.72px | The flagship hero ("Simulator Dashboard"). One per page. |
+| `{typography.display-xl}` | 80px | 500 | 1.0 | -0.8px | Section openers ("Inspect the Demo Flow"). |
+| `{typography.display-lg}` | 48px | 500 | 1.21 | -0.48px | Sub-section titles. |
+| `{typography.display-md}` | 40px | 500 | 1.2 | -0.4px | Feature card titles. |
+| `{typography.heading-lg}` | 32px | 500 | 1.19 | -0.32px | Plan card titles. |
+| `{typography.heading-md}` | 24px | 500 | 1.33 | 0 | Section sub-titles. |
+| `{typography.heading-sm}` | 20px | 500 | 1.4 | 0 | List headers, prominent labels. |
+| `{typography.body-lg}` | 18px | 400 | 1.56 | -0.09px | Product prose. |
+| `{typography.body-md}` | 16px | 400 | 1.5 | 0.24px | Default body. |
+| `{typography.body-md-bold}` | 16px | 600 | 1.5 | 0.16px | Emphatic body. |
+| `{typography.body-sm}` | 14px | 400 | 1.43 | 0 | Captions, metadata. |
+| `{typography.button-lg}` | 20px | 500 | 1.4 | 0 | Hero CTAs (Aeonik Pro). |
+| `{typography.button-md}` | 16px | 600 | 1.5 | 0.24px | Default button label. |
+| `{typography.button-sm}` | 14px | 600 | 1.43 | 0 | Pill chips, sub-nav. |
+| `{typography.caption}` | 13px | 400 | 1.4 | 0 | Footer disclosure, regulatory text. |
+| `{typography.link-emph}` | 16px | 700 | 1.5 | 0.24px | Emphatic inline link in dark mode. |
 
 ### Principles
-
-- Match type size to the work surface. Dashboards need compact hierarchy, not oversized marketing display type.
-- Use Inter Tight for headings only. Use Inter for body, controls, captions, tables, and helper text.
-- Keep letter spacing at `0` for most UI. Tight negative tracking belongs only on large display text.
-- Use monospace styling only for values that benefit from fixed-width scanning: ids, keys, hashes, and amounts in tight columns.
+- Display sizes always run at weight 500 with `lineHeight: 1.0` (or 1.19–1.21 below 48px). The negative letter-spacing scales with size — bigger types tighten more.
+- Body Inter sits at weight 400 with positive tracking (`0.24px`) — the small spacing nudge makes UI labels feel slightly mechanical, fitting fintech precision.
+- Hero CTAs use the Aeonik Pro `{typography.button-lg}` variant; everything below the hero uses the Inter `{typography.button-md}`.
+- Inline links inside dark photo regions step up to weight 700 (`{typography.link-emph}`) so they hold contrast against the canvas without using the cobalt accent.
 
 ### Note on Font Substitutes
 
-If Inter Tight is unavailable, use Inter Display, General Sans, Söhne, or
-system-ui. Keep dashboard headings modest and avoid aggressive negative tracking
-inside panels.
+When Aeonik Pro is unavailable, clamp display `lineHeight` to 1.0 explicitly and apply -1% letter-spacing on display sizes. Inter Display, General Sans, or Söhne will read closest to the original. Inter is open-source and should be used directly.
 
 ## Layout
 
 ### Spacing System
-
 - **Base unit**: 4px, with the working scale on multiples of 4 / 8 / 16.
-- **Tokens**: `{spacing.xxs}` 4px, `{spacing.xs}` 6px, `{spacing.sm}` 8px, `{spacing.md}` 14px, `{spacing.lg}` 16px, `{spacing.xl}` 24px, `{spacing.xxl}` 32px, `{spacing.xxxl}` 48px, `{spacing.block}` 80px, `{spacing.section}` 88px, `{spacing.band}` 120px.
-- Sidebar groups use 16-24px vertical spacing.
-- Main sections use 24-40px spacing depending on density.
-- Table cell padding should remain compact enough for repeated inspection.
+- **Tokens**: `{spacing.xxs}` 4px · `{spacing.xs}` 6px · `{spacing.sm}` 8px · `{spacing.md}` 14px · `{spacing.lg}` 16px · `{spacing.xl}` 24px · `{spacing.xxl}` 32px · `{spacing.xxxl}` 48px · `{spacing.block}` 80px · `{spacing.section}` 88px · `{spacing.band}` 120px.
+- Section padding: `{spacing.section}` (88px) vertical between bands; `{spacing.band}` (120px) on the hero band and the closing featured section.
+- Card internal padding: `{spacing.xxl}` (32px) on `{component.feature-card-light}`, `{component.option-card}`, `{component.feature-card-dark}`.
 
 ### Grid & Container
-
-- **Desktop shell**: fixed left terminal plus constrained main workspace.
-- **Main content width**: approximately 1100-1200px for readable tables.
-- **Quick guide grid**: 4-up at desktop, 2-up at tablet, 1-up at mobile.
-- **Metric grid**: responsive columns that preserve label/value readability.
-- **Tables**: allow horizontal scroll instead of dropping accounting columns.
+- **Max content width** ≈ 1200px on body sections; hero bands run full-bleed.
+- **Option grid**: 4-up option cards on the home page, stacking 2-up at tablet and 1-up at small mobile.
+- **Feature grid**: 3-up at desktop, 2-up at tablet, 1-up at mobile.
+- **Product mockup bands**: a single full-width hero photo of a phone or card mockup, no surrounding chrome — the asset itself is the section.
 
 ### Whitespace Philosophy
-
-- Use whitespace to separate reasoning steps: controls, invariant, metrics, tables.
-- Do not pad table rows so much that ledger scanning becomes slow.
-- Use hairline dividers for structure before adding shadows.
-- Avoid nested cards. A panel can contain controls or a repeated item, but cards should not sit inside other cards unless the pattern has a clear functional purpose.
+- Whitespace is generous and editorial — sections breathe at 88–120px so display headlines have room to register at 80–136px without feeling cramped.
+- Inside cards, padding stays at 32px so feature copy and option groups have a consistent rhythm.
+- Hairline `{colors.hairline-light}` dividers replace shadow on white surfaces; `{colors.hairline-dark}` carries the corresponding role in dark regions.
 
 ## Elevation & Depth
 
 | Level | Treatment | Use |
 |---|---|---|
-| 0 - flat | No shadow, no border | Page canvas, table body rows. |
-| 1 - panel | Hairline border on canvas/surface | Sidebar groups, quick guide cards, metric cards. |
-| 2 - raised status | Subtle wash plus border | Invariant, toast, protected/offline state. |
-| 3 - action emphasis | Primary/semantic color fill | Primary action, destructive reset, race warning. |
-| 4 - modal/popover | Surface plus border and soft shadow | Settings popover, toast layer. |
+| 0 — flat | No shadow, no border | Default canvas bands (light or dark), full-bleed hero. |
+| 1 — surface card | `{colors.surface-card}` (white) on `{colors.surface-soft}` band | Feature cards inside light bands. |
+| 2 — surface elevated dark | `{colors.surface-elevated}` (`#16181a`) on `{colors.canvas-dark}` | Option cards inside the featured section. |
+| 3 — featured surface | `{colors.primary}` on `{colors.canvas-dark}` | Featured option card (cobalt violet inversion). |
+| 4 — product mockup | Full-bleed photo asset | Hero phone / card / terminal mockup bands. |
 
-The product should not depend on heavy drop shadows. Depth comes from surface
-contrast, hairlines, position, and restrained shadows on overlays.
+The system has **no traditional drop-shadow language**. Surfaces register depth via colour-blocking (light → dark band switches) and surface-luminance shifts (`{colors.canvas-dark}` → `{colors.surface-elevated}`). Photography mockups carry their own depth from the asset itself.
 
 ### Decorative Depth
-
-- Quick guide cards may use a light wash and top accent bar to distinguish the four learning steps.
-- Toasts may use a stronger shadow because they float above the app shell and must be noticed.
-- Invariant and status cards should use semantic color washes tied to state.
-- Avoid decorative orbs, atmospheric gradients, or stock-like imagery in the dashboard.
+- **Product mockup hero bands** — the home page features a phone mockup full-bleed against `{colors.canvas-dark}`, with the device's own glow providing the only atmospheric depth. No additional gradients, no shadows.
+- **Featured option card** — the cobalt-violet `{component.option-card-featured}` sits inside the otherwise dark option grid as a single saturated colour block, marking the highlighted choice visually.
+- **Warm card mockup** — the visual system uses `{colors.accent-brown}` and a deep gradient on card mockups for contrast without resorting to gold-on-black metallic effects.
 
 ## Shapes
 
 ### Border Radius Scale
 
 | Token | Value | Use |
-|---|---:|---|
-| `{rounded.none}` | 0px | App shell, page bands, table dividers. |
-| `{rounded.sm}` | 8px | Quick guide cards, badges, small chips. |
-| `{rounded.md}` | 12px | Inputs, buttons, metric cards, invariant card. |
-| `{rounded.lg}` | 20px | Larger overlays or empty-state panels. |
-| `{rounded.xl}` | 28px | Rare large illustrative containers. |
-| `{rounded.full}` | 9999px | Icon buttons, pills, toggles, status badges. |
+|---|---|---|
+| `{rounded.none}` | 0px | Hero bands, full-bleed sections, footer. |
+| `{rounded.sm}` | 8px | Inline tags, small chips. |
+| `{rounded.md}` | 12px | Form inputs, download tiles. |
+| `{rounded.lg}` | 20px | Feature cards, option cards. |
+| `{rounded.xl}` | 28px | Product mockup containers. |
+| `{rounded.full}` | 9999px | Buttons, pills, badges, tabs. |
 
-### Geometry
-
-- Tables should use stable columns and predictable row heights.
-- Icon buttons should be square or circular with fixed dimensions.
-- Range controls should reserve stable space for labels and current value.
-- Toasts should have a bounded width and wrap long idempotency keys safely.
-- Avoid layout shifts when status labels, translations, or dynamic amounts change.
+### Photography Geometry
+- Phone mockups: 9:19.5 (vertical) with `{rounded.xl}` corners on the device chrome.
+- Card mockups: 1.586:1 (credit-card aspect) with `{rounded.lg}` corners.
+- Terminal/POS mockups: 4:3 with `{rounded.xl}` corners and substantial padding around the device.
+- Lifestyle photography (rare): 16:9 with `{rounded.lg}` corners.
 
 ## Components
 
 ### Buttons
 
-**`button-primary`** - main simulator action
+**`button-primary`** — white CTA on dark
+- Background `{colors.canvas-light}`, label `{colors.canvas-dark}`, type `{typography.button-md}`, padding `14px 28px`, `rounded: {rounded.full}`, height 48px.
+- The project's primary CTA, used on every dark hero band ("Open the Simulator", "View the Demo").
+- Pressed state lives in `button-primary-pressed` (background `{colors.faint}`).
 
-- Background `{colors.primary}`, label `{colors.on-primary}`, type `{typography.button-md}`, `rounded: {rounded.md}`, height 48px.
-- Use for the main action that posts a simulator payment.
-- Pressed/active state uses `{colors.primary-deep}`.
+**`button-dark`** — dark CTA on light
+- Background `{colors.canvas-dark}`, label `{colors.on-dark}`, type `{typography.button-md}`, `rounded: {rounded.full}`.
+- The reverse-canvas equivalent of `{component.button-primary}` — used inside white catalogue bands.
 
-**`button-secondary`** - quiet secondary action
+**`button-soft`** — soft surface CTA
+- Background `{colors.surface-soft}`, label `{colors.ink}`, type `{typography.button-md}`, `rounded: {rounded.full}`.
+- Tertiary action in white-canvas regions ("Learn more", "View FAQs").
 
-- Background `{colors.surface-soft}`, label `{colors.ink}`, type `{typography.button-md}`, `rounded: {rounded.md}`.
-- Use for reset alternatives, save/settings controls, or low-risk secondary commands.
+**`button-outline-light`** — outlined CTA on light
+- Background `{colors.canvas-light}`, label `{colors.ink}`, 1px solid `{colors.hairline-strong}`, type `{typography.button-md}`, `rounded: {rounded.full}`.
+- Secondary action when paired with `{component.button-dark}`.
 
-**`button-danger`** - destructive demo action
+**`button-outline-dark`** — outlined CTA on dark
+- Background `{colors.canvas-dark}`, label `{colors.on-dark}`, 1px solid `{colors.on-dark}`, type `{typography.button-md}`, `rounded: {rounded.full}`, padding `13px 27px`, height 48px.
+- Dark-canvas counterpart of `{component.button-outline-light}`; used inside dark hero bands as a tertiary action when paired with `{component.button-primary}`.
 
-- Background `{colors.accent-danger}`, label `{colors.on-primary}`, type `{typography.button-md}`, `rounded: {rounded.md}`.
-- Use when the action resets demo state or reverses a transaction.
-
-**`button-warning`** - race/pending action
-
-- Background `{colors.accent-warning}`, label `{colors.canvas-dark}`, type `{typography.button-md}`, `rounded: {rounded.md}`.
-- Use for concurrency race simulation or pending/wake-related actions.
-
-**`button-outline`** - secondary action on a plain surface
-
-- Transparent or canvas background, label `{colors.ink}`, 1px solid `{colors.hairline-strong}`, type `{typography.button-md}`, `rounded: {rounded.md}`.
-- Use when paired beside a filled button.
-
-**`button-icon`** - icon-only utility action
-
-- Square or circular, fixed 40px target minimum.
-- Requires an accessible label or title.
-- Use for settings, close, refresh, expand, and similar utilities.
+**`button-pill-sm`** — small pill chip
+- Background `{colors.surface-soft}`, label `{colors.ink}`, type `{typography.button-sm}`, `rounded: {rounded.full}`, padding `8px 16px`, height 36px.
+- Sub-nav chips, filter pills.
 
 ### Cards & Containers
 
-**`sidebar`** - payment terminal
+**`hero-band-dark`** — full-bleed dark hero
+- Background `{colors.canvas-dark}`, text `{colors.on-dark}`, type `{typography.display-xxl}` for the title, padding `{spacing.section}` (88px) vertical, `rounded: {rounded.none}`.
+- Used only on the home page hero band.
 
-- Persistent left-side control panel.
-- Contains sender/receiver, amount, FX rate, idempotency, locking strategy, and primary actions.
-- Keep it scannable; do not turn it into a marketing hero.
+**`hero-band-photo`** — photo-led hero
+- Background `{colors.canvas-dark}` with full-bleed product photography, text `{colors.on-dark}`, type `{typography.display-xl}`, `rounded: {rounded.none}`.
+- Used on product pages — phone or card mockup as the full-band canvas.
 
-**`quick-guide-card`** - learning step card
+**`feature-card-light`** — feature card on white
+- Background `{colors.surface-card}`, text `{colors.ink}`, 1px solid `{colors.hairline-light}`, type `{typography.body-md}`, `rounded: {rounded.lg}`, padding `{spacing.xxl}` (32px).
+- Used in white catalogue bands for feature comparisons.
 
-- Background `{colors.canvas-light}`, text `{colors.ink}`, 1px solid `{colors.hairline-light}`, type `{typography.body-sm}`, `rounded: {rounded.sm}`, padding 16px.
-- Uses a top accent bar to distinguish each step.
-- Step labels should remain short: Connect, Transfer, Verify, Stress.
+**`feature-card-dark`** — feature card on dark
+- Background `{colors.surface-elevated}`, text `{colors.on-dark}`, type `{typography.body-md}`, `rounded: {rounded.lg}`, padding `{spacing.xxl}`.
+- Used inside dark storytelling sections.
 
-**`invariant-card`** - correctness signal
+**`option-card`** — grouped option card
+- Background `{colors.surface-elevated}`, text `{colors.on-dark}`, type `{typography.body-md}`, `rounded: {rounded.lg}`, padding `{spacing.xxl}` (32px).
+- Option name in `{typography.heading-lg}` ("Connect", "Inspect", "Compare", "Stress").
 
-- Background should use a subtle state wash.
-- Healthy state uses success/teal.
-- Imbalance/error state uses danger/red.
-- Pending/backend wake uses warning/orange.
-- The text must say per-currency balancing when that is what is being checked.
+**`option-card-featured`** — featured option card
+- Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.body-md}`, `rounded: {rounded.lg}`, padding `{spacing.xxl}`.
+- Cobalt-violet inversion of `{component.option-card}` — used for the highlighted option.
 
-**`metric-card`** - compact state summary
+**`product-mockup`** — full-bleed product asset
+- Background `{colors.canvas-dark}`, the asset itself fills the band, `rounded: {rounded.xl}` on the device chrome.
+- Phone, card, and terminal mockups — no caption overlay, no surrounding chrome.
 
-- Shows a label and a value.
-- Use for total debits, total credits, transactions, entries, and accounts.
-- Avoid business metrics that are not derived by the simulator.
-
-**`data-table`** - ledger reading surface
-
-- Rounded container with hairline dividers.
-- Header labels use uppercase micro-label treatment.
-- Rows should favor scanability and stable columns.
-- Use color for direction and status, but include text labels.
-
-**`settings-popover`** - backend and language controls
-
-- Appears from the gear action.
-- Should include language controls and backend origin controls.
-- Keep copy concise; users should understand when the remote Render API may need warming.
-
-**`toast`** - outcome notification
-
-- Floats above the layout, not inside the sidebar stack.
-- Uses `role="status"` for non-error messages and `role="alert"` for errors.
-- Includes a close action.
-- Wraps long text safely on mobile.
+**`download-tile`** — resource link download tile
+- Background `{colors.surface-soft}`, text `{colors.ink}`, type `{typography.body-sm}`, `rounded: {rounded.md}`, padding `12px 20px`, height 56px.
+- Documentation, demo, and source download buttons, side-by-side.
 
 ### Inputs & Forms
 
-**`text-input`** - default input
-
+**`text-input`** — default input
 - Background `{colors.canvas-light}`, text `{colors.ink}`, type `{typography.body-md}`, 1px solid `{colors.hairline-light}`, `rounded: {rounded.md}`, padding `14px 16px`, height 56px.
-- Use for amount, API URL, custom idempotency key, and similar typed input.
-
-**`select-input`** - account or mode selector
-
-- Same sizing and border as `text-input`.
-- Must show enough text to distinguish account name and currency.
-- Avoid truncating the currency code.
-
-**`range-input`** - FX rate control
-
-- Track uses a quiet neutral; thumb uses `{colors.primary}`.
-- Current value appears adjacent to the control.
-- Derived destination amount should update immediately.
-
-**`checkbox`** - binary setting
-
-- Use for auto-generated idempotency key or similar binary settings.
-- Label should describe the on-state.
+- Generous height for demo accessibility — comfortably exceeds WCAG AAA touch target.
 
 ### Navigation
 
-**`app-shell`**
+**`nav-bar`** — top nav (desktop)
+- Background `{colors.canvas-dark}`, text `{colors.on-dark}`, type `{typography.button-md}`, height 64px.
+- Left: wordmark logo. Centre: top-level nav ("Demo", "Docs", "Architecture"). Right: language switcher + `{component.button-primary}`.
 
-- The dashboard is the first screen.
-- There is no marketing landing page before the simulator.
-- Keep settings and language actions available without hiding the core workflow.
+**`nav-bar`** (mobile)
+- Same height 64px, collapses centre nav into a hamburger icon. Logo stays left, sign-in CTA stays right.
 
-**`language-menu`**
-
-- Should show explicit language names.
-- Active language has a checkmark and clear selected state.
-
-**`ledger-tabs`**
-
-- Use tabs to switch between transaction journal and ledger legs.
-- Active tab should have visible selection state.
-- The tab label should describe the table content, not the implementation.
+**`sub-nav-pill`** — sub-nav chip
+- Pill chips set in a horizontal row inside dark sections (e.g. "Overview", "Design", "Demo"), `{component.sub-nav-pill}` styling.
 
 ### Signature Components
 
-**`currency-invariant-status`**
+**`badge-tag`** — neutral tag
+- Background `{colors.surface-soft}`, text `{colors.ink}`, type `{typography.caption}`, `rounded: {rounded.full}`, padding `4px 12px`.
+- Inline tags inside feature cards.
 
-- Names the invariant and shows whether it is balanced.
-- Should not claim global balancing is sufficient for multi-currency accounting.
+**`badge-feature`** — feature highlight badge
+- Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.caption}`, `rounded: {rounded.full}`, padding `4px 12px`.
+- "New", "Featured" badges anchored on option cards.
 
-**`entry-direction-badge`**
-
-- `DEBIT` in success/teal.
-- `CREDIT` in danger/red.
-- Include the word and color; do not rely on color alone.
-
-**`idempotency-key`**
-
-- Use mono styling and safe wrapping.
-- Preserve the full key somewhere visible or copyable.
-
-**`backend-status`**
-
-- Distinguish connected, offline, protected, and waking states.
-- Protected should not look like generic offline failure.
+**`footer`** — global footer
+- Background `{colors.canvas-dark}`, text `{colors.on-dark-mute}`, type `{typography.body-sm}`, `rounded: {rounded.none}`, padding `80px 24px`.
+- Multi-column quick-links grid above a copyright + regulatory disclosure block separated by `{colors.divider-soft}`.
 
 ## Do's and Don'ts
 
 ### Do
-
-- Use the dashboard as the primary experience.
-- Keep controls dense, legible, and predictable.
-- Use `{colors.primary}` sparingly for focus and primary action.
-- Use semantic colors for actual state: debit, credit, warning, error, success.
-- Preserve the accounting labels in visible UI.
-- Keep table columns stable and scannable.
-- Make long keys and descriptions wrap without breaking layout.
-- Keep copy educational and neutral.
-- Point engineering behavior questions to the engineering design doc.
+- Switch full bands between `{colors.canvas-dark}` (storytelling) and `{colors.canvas-light}` (catalogue). The two-mode rhythm is core.
+- Use `{component.button-primary}` (white pill on dark) as the primary CTA on every dark hero band. It's the project's loudest action.
+- Reserve `{colors.primary}` for the featured option card and the project mark — the cobalt should feel like a deliberate stamp, not a colour theme.
+- Set hero headlines in **Aeonik Pro 500** at 80–136px with `lineHeight: 1.0` and large negative letter-spacing.
+- Use **Inter** for body, button labels, captions — never substitute Aeonik Pro for body type.
+- Apply `{rounded.full}` to every button and pill; `{rounded.lg}` (20px) to feature and option cards; `{rounded.md}` (12px) to inputs.
+- Show product mockups full-bleed inside dark sections — the asset IS the section.
+- Use the wide accent palette (`{colors.accent-teal}`, `{colors.accent-pink}`, `{colors.accent-light-green}`, etc.) inside product illustrations and iconography only.
 
 ### Don't
-
-- Don't reintroduce unsupported scale claims, regulated financial-service claims, compliance claims, or production-readiness claims.
-- Don't build a marketing landing page in front of the dashboard.
-- Don't use accent colors as arbitrary decorative surfaces.
-- Don't hide ledger legs behind vague summary copy.
-- Don't rely on color alone to distinguish debit/credit or success/error.
-- Don't place cards inside cards unless the nested element is a modal, repeated item, or clearly framed tool.
-- Don't loosen the UI into a one-note purple theme.
-- Don't remove API/backend settings affordances from the dashboard.
+- Don't use accent colours (`{colors.accent-teal}`, `{colors.accent-pink}`, etc.) as button surfaces. They live inside illustrations only.
+- Don't use a near-black canvas. The visual system is `#000000`, not `#0a0a0a`.
+- Don't pair white text with cobalt violet inside body content — `{colors.primary}` is for the featured option card surface, not large prose.
+- Don't add drop shadows on cards. Elevation is canvas + surface-luminance shifts.
+- Don't introduce a secondary signature colour. Cobalt violet is the only visual stamp.
+- Don't loosen Aeonik Pro `lineHeight` past 1.0 on display sizes. Tight stacking is structural.
+- Don't bump body Inter to weight 500. Use 400 (default) or 600 (emphatic) — never the in-between.
+- Don't pair `{colors.canvas-dark}` with another dark surface beyond `{colors.surface-elevated}`. The surface ladder has only two dark steps.
 
 ## Responsive Behavior
 
 ### Breakpoints
 
 | Name | Width | Key Changes |
-|---|---:|---|
-| Desktop XL | >= 1440px | Sidebar plus wide table workspace; quick guide 4-up. |
-| Desktop | 1280-1439px | Main container narrows; table columns remain visible. |
-| Tablet Large | 1024-1279px | Sidebar can remain, but spacing tightens. |
-| Tablet | 768-1023px | Guide cards 2-up; tables may scroll horizontally. |
-| Mobile Large | 426-767px | Shell stacks; guide cards 1-up; buttons full width where useful. |
-| Mobile | <= 425px | Single column; compact headings; preserve table data with horizontal scroll. |
+|---|---|---|
+| Desktop XL | ≥ 1440px | 4-up plan grid, full-bleed product mockup bands, max content 1200. |
+| Desktop | 1280–1439px | Container shrinks; xl side padding. |
+| Tablet Large | 1024–1279px | Option grid 4-up; feature grid 3-up. |
+| Tablet | 768–1023px | Option grid 2-up; feature grid 2-up. |
+| Mobile Large | 426–767px | Option grid 1-up; feature grid 1-up; nav collapses to hamburger; hero `display-xxl` clamps to 64px. |
+| Mobile | ≤ 425px | All grids 1-up; hero clamps to 48px; section padding `{spacing.section}` collapses to 64px. |
 
 ### Touch Targets
-
-- Primary buttons should be at least 48px tall.
-- Icon buttons should be at least 40px, preferably 44px on mobile.
-- Inputs should be at least 48px tall; amount and URL inputs can remain 56px.
-- Toast close controls need reliable touch targets.
+- All buttons ship at minimum 48px tall — comfortably exceeds WCAG AAA (44px). Default `{component.button-primary}` is 48px.
+- `{component.text-input}` is 56px tall — demo-grade accessibility.
+- `{component.button-pill-sm}` (36px) is bumped to 44px on mobile via padding adjustment.
 
 ### Collapsing Strategy
+- Top-level nav collapses to hamburger at < 1024px; the wordmark and `{component.button-primary}` stay anchored.
+- Hero `{typography.display-xxl}` clamps: 136px → 80px → 64px → 48px across the breakpoint ladder.
+- Option grid steps from 4-up to 2-up at < 1024px to 1-up at < 768px.
+- Product mockup bands maintain full-bleed at every breakpoint; the asset crops inward rather than letterboxing.
+- Sub-nav pills convert from a wrap row to a horizontal scroll-rail at < 768px.
 
-- Sidebar and main workspace stack vertically below tablet width.
-- Keep payment controls above tables on mobile so the sample flow remains usable.
-- Quick guide cards collapse from 4-up to 2-up to 1-up.
-- Ledger tables scroll horizontally rather than dropping currency, direction, or amount.
-- Settings popover should stay within viewport bounds.
-
-### Table Behavior
-
-- Preserve account, currency, direction, and amount columns.
-- Use horizontal overflow for narrow screens.
-- Keep row labels readable and avoid clipping long transaction descriptions.
-- Use dynamic wrapping for idempotency keys and descriptions.
-
-### Toast Behavior
-
-- Desktop: fixed top-right placement.
-- Mobile: fixed with left/right bounds and auto width.
-- Long error messages wrap with `overflow-wrap: anywhere`.
-
-## Accessibility
-
-- Maintain high contrast in light and dark themes.
-- Provide focus states for controls.
-- Give icon-only buttons labels or titles.
-- Use `role="status"` and `role="alert"` appropriately for toasts.
-- Avoid communicating ledger direction only by color.
-- Keep keyboard navigation possible through sidebar controls, tabs, and settings.
-- Avoid text overlap in translated strings.
-
-## Interaction Guide
-
-1. A user lands on the dashboard and sees a configured sample flow.
-2. They can execute the payment without needing to read documentation first.
-3. After execution, state refreshes and the new transaction is visible.
-4. They can switch to ledger legs to inspect debit/credit postings.
-5. They can retry an idempotency key and see duplicate behavior safely.
-6. They can reverse a transaction using append-only correction.
-7. They can switch locking mode and run the race simulation to learn concurrency tradeoffs.
-
-Each interaction should make the concept more inspectable. Avoid hiding the
-mechanics behind animations or vague success states.
+### Image Behavior
+- Phone and card mockups are served at 1.5× and 2× DPR; below 768px the system swaps to a smaller hero crop.
+- Product photography retains its own atmospheric lighting at every breakpoint — no responsive variant assets.
 
 ## Iteration Guide
 
-1. Focus on one component at a time.
-2. Reference component names and tokens directly (`{colors.primary}`, `{component.invariant-card}`, `{rounded.md}`).
-3. Keep UI copy in simulator scope.
-4. Add variants as separate entries (`-pressed`, `-warning`, `-protected`, `-disabled`) rather than burying them in prose.
-5. Default body type to `{typography.body-md}`.
-6. Use `{typography.mono}` for ids, keys, and code-like values.
-7. Keep `{colors.primary}` scarce; semantic colors should carry semantic state.
-8. For any UI change, check desktop and mobile widths.
-9. When adding a new educational concept, add both the control and the ledger/state view that makes it observable.
+1. Focus on ONE component at a time. Most surfaces share the `{colors.canvas-dark}` / `{colors.canvas-light}` pair with `{rounded.full}` for buttons and `{rounded.lg}` for cards.
+2. Reference component names and tokens directly (`{colors.primary}`, `{component.option-card-featured}`, `{rounded.lg}`) — do not paraphrase.
+3. Run `npx @google/design.md lint DESIGN.md` after edits; orphaned-tokens warnings will catch unused entries.
+4. Add new variants as separate entries (`-pressed`, `-featured`, `-disabled`) — do not bury them in prose.
+5. Default body type to `{typography.body-md}` (Inter 400 with positive tracking); reach for `{typography.body-md-bold}` only on emphasis.
+6. Keep `{colors.primary}` scarce — if more than one cobalt-violet element appears per viewport, ask whether one should drop to `{component.option-card}` (`{colors.surface-elevated}`) instead.
 
 ## Known Gaps
 
-- Pressed/active visual states are documented most fully for primary actions; secondary controls could use a more complete state table.
-- Transaction audit details could use a dedicated detail drawer or page.
-- FX quote snapshots are auditable through the API but not fully surfaced in the dashboard.
-- The reversal relationship is visible in transaction state but could be made clearer visually.
-- Mobile table inspection works best with horizontal scrolling; a purpose-built mobile ledger row could be better.
-- Visual regression checks are not yet automated.
-
-## What I Would Refine With More Time
-
-- Add a transaction detail drawer for entries, FX quote snapshot, fingerprint, and reversal relationship.
-- Add a clearer visual pairing between original and reversal transactions.
-- Add copy and UI states for idempotency retry versus idempotency conflict.
-- Add a compact per-currency invariant breakdown.
-- Add visual regression checks for desktop, tablet, and mobile.
-- Add a richer empty/loading/waking/protected-backend state library.
+- Pressed/active visual states are documented for `button-primary-pressed` only; other components rely on focus-ring (browser default) for interactive feedback.
+- Authenticated app surfaces (transactions, transfers, account settings) are out of scope — only the public product canvas is documented.
+- The wide accent palette (`{colors.accent-teal}` through `{colors.accent-brown}`) is captured from the extracted token set, but exact usage inside product illustrations varies per market and product line; document per-illustration rather than as system buttons.
+- Mobile-app screenshot art direction (phone bezels, status bars) is product-photography territory and not standardised as design tokens.
