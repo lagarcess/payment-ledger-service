@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 import os
@@ -62,11 +63,17 @@ def ensure_bootstrapped():
         app_state["account_ids"] = bootstrap_database(engine, SessionLocal)
         app_state["pay_n"] = 0
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_bootstrapped()
+    yield
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  FASTAPI APP SETUP
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-app = FastAPI(title="Ledger Engine API")
+app = FastAPI(title="Ledger Engine API", lifespan=lifespan)
 
 GITHUB_PAGES_DASHBOARD_URL = "https://lagarcess.github.io/payment-ledger-service/"
 RENDER_HOST_SUFFIX = ".onrender.com"
@@ -99,10 +106,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def startup_event():
-    ensure_bootstrapped()
 
 # Mount static files (HTML, CSS, JS)
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
