@@ -1,150 +1,207 @@
-# Architecture: Enterprise Compliance Mechanisms
+# Architecture: Educational Ledger Simulator
 
-> **Document scope**: This document details the four enterprise-grade compliance mechanisms enforced by the Lightspark Payment Service ledger engine.  For UI/UX design guidelines, see [`DESIGN.md`](./DESIGN.md).
-
----
-
-## 1. Append-Only Immutability
-
-The ledger enforces **strict append-only semantics** at both the application and database levels.  Once a transaction or entry is committed, it is permanent and cannot be modified or deleted.
-
-### Database-Level Enforcement
-
-| Table          | Foreign Key Constraint          | Effect                                                                 |
-|----------------|---------------------------------|------------------------------------------------------------------------|
-| `entries`      | `ondelete="RESTRICT"` → `transactions` | Prevents deletion of any `Transaction` row while entries reference it. |
-| `entries`      | `ondelete="RESTRICT"` → `accounts`     | Prevents deletion of any `Account` row while entries reference it.     |
-
-### Application-Level Enforcement
-
-- **No cascade delete**: The `Transaction.entries` relationship uses `cascade="save-update, merge"` — explicitly excluding `delete` and `delete-orphan`.  SQLAlchemy will **never** cascade a deletion from a parent to its child entries.
-- **Append-only bootstrap**: The `bootstrap_database()` function seeds the ledger exclusively through balanced `INSERT` operations against a System Equity account.  No `DELETE` or destructive `UPDATE` statements are issued against ledger rows.  The only DDL operations are `DROP ALL` / `CREATE ALL` for schema recreation.
-
-### Correction Mechanism
-
-Errors are corrected through **reversal entries** (new append-only journal entries that cancel the effect of the original), never through row deletion or in-place modification.
+> **Document scope:** This document explains how the demo models ledger
+> concepts. It documents production concerns separately; it does not claim the
+> simulator is production payment infrastructure.
 
 ---
 
-## 2. Double-Entry Balance Invariant (Σ debits == Σ credits)
+## 1. Append-Only Ledger Rows
 
-Every `Transaction` in the ledger must satisfy the fundamental accounting identity:
+The simulator treats transactions and entries as posted ledger history. Once a
+transaction is committed, corrections happen through compensating reversal
+transactions instead of destructive edits.
 
+Database safeguards:
+
+| Table | Constraint | Effect |
+|-------|------------|--------|
+| `entries` | `transaction_id` uses `ondelete="RESTRICT"` | Prevents deleting a transaction while entries reference it |
+| `entries` | `account_id` uses `ondelete="RESTRICT"` | Prevents deleting an account while entries reference it |
+| `entries` | `amount > 0` check | Keeps sign semantics in `direction`, not in the amount |
+
+The `Transaction.entries` and `Transaction.fx_quote_snapshot` relationships do
+not use delete-orphan cascades. The `/api/reset` endpoint and
+`bootstrap_database()` recreate the demo schema, but ordinary ledger correction
+uses append-only reversals.
+
+---
+
+## 2. Accounting Convention
+
+The project uses asset-normal demo balances:
+
+```text
+DEBIT  = increase account balance
+CREDIT = decrease account balance
 ```
-Σ DEBIT amounts  ==  Σ CREDIT amounts  (globally, and per transaction)
-```
 
-### Central FX Clearing Constraint
-
-Cross-currency payments route through **Corporate FX Clearing Accounts** using a 4-leg balanced entry structure:
-
-```
-┌──────────┐       Leg 1 (USD)        ┌─────────────────────┐
-│  User A  │ ──── CREDIT ──────────▶  │  FX Clearing (USD)  │
-│  (USD)   │                DEBIT ◀── │                     │
-└──────────┘                          └─────────────────────┘
-                                                │
-                                      Leg 2 (EUR)│
-                                                ▼
-┌──────────┐                          ┌─────────────────────┐
-│  User B  │ ◀──── DEBIT  ────────── │  FX Clearing (EUR)  │
-│  (EUR)   │                CREDIT ──▶│                     │
-└──────────┘                          └─────────────────────┘
-```
-
-### Invariant Verification
-
-The `LedgerEngine.verify_system_invariants()` method asserts that the global net balance across all entries is exactly zero:
+Balances are derived from entries:
 
 ```sql
-SELECT COALESCE(SUM(
-    CASE WHEN direction = 'DEBIT'  THEN amount
-         WHEN direction = 'CREDIT' THEN -amount
-    END
-), 0) AS net
-FROM entries
+SUM(CASE
+    WHEN direction = 'DEBIT'  THEN amount
+    WHEN direction = 'CREDIT' THEN -amount
+END)
 ```
 
-If `net ≠ 0`, an `InvariantViolationError` is raised, indicating data corruption.
-
-### Overdraft Protection
-
-`LedgerEngine.verify_no_negative_user_balances()` ensures no `USER` account carries a negative computed balance.  Corporate/clearing accounts are excluded as they may legitimately carry negative positions.
+There is no stored account balance column.
 
 ---
 
-## 3. Pessimistic Row Locking
+## 3. Currency-Aware Invariants
 
-The `execute_cross_currency_payment()` method acquires **`FOR UPDATE`** locks on the `Account` rows *before* computing aggregate balances.  This prevents concurrent double-spends under high concurrency.
+The ledger must balance independently by currency. A globally net-zero sum is
+not sufficient because it could hide a USD imbalance behind an opposite EUR
+imbalance.
 
-### Locking Strategy
+`LedgerEngine.verify_system_invariants()` groups by `Account.currency` through
+`entries -> accounts`:
 
-```python
-# Step 1: Lock Account rows (prevents concurrent reads)
-session.query(Account).with_for_update().get(sender_id)
-session.query(Account).with_for_update().get(fx_clearing_eur_id)
-
-# Step 2: Compute balances AFTER locks are held
-sender_balance = self._get_account_balance(session, sender_id)
-fx_eur_balance = self._get_account_balance(session, fx_clearing_eur_id)
+```sql
+SELECT a.currency,
+       SUM(CASE WHEN e.direction = 'DEBIT' THEN e.amount
+                WHEN e.direction = 'CREDIT' THEN -e.amount END) AS net
+FROM entries e
+JOIN accounts a ON a.id = e.account_id
+GROUP BY a.currency
 ```
 
-### Why Lock the Row, Not the Aggregate?
+Every returned `net` must be zero. Transaction execution also verifies the
+newly-created transaction by currency before commit.
 
-The `_get_account_balance()` function computes a `SUM()` aggregate over the `entries` table.  Applying `FOR UPDATE` to an aggregate query is syntactically invalid in most SQL dialects (including PostgreSQL).  Instead, we lock the **parent Account row** first, which:
+Bootstrap uses currency-specific equity accounts:
 
-1. Establishes an exclusive row-level lock on the account.
-2. Blocks any concurrent transaction that also attempts to lock the same account.
-3. Guarantees that the subsequent balance aggregate reads a consistent snapshot.
+- `System Equity (USD)`
+- `System Equity (EUR)`
 
-### Optimistic Concurrency Control (OCC)
-
-As an additional safety layer, the `Account` model carries a `version_id` column configured as SQLAlchemy's version counter (`__mapper_args__ = {"version_id_col": version_id}`).  Any concurrent modification to the same account row will raise `StaleDataError`.
+The old `MULTI` equity account is intentionally not used because it would allow
+currencies to net against each other.
 
 ---
 
-## 4. 64-Bit Minor Unit Integer Arithmetic
+## 4. Cross-Currency FX Clearing
 
-All monetary values are stored and computed as **integers representing the smallest currency unit** (e.g., cents for USD/EUR).
+For a USD to EUR payment, the simulator creates four legs:
 
-### Database Enforcement
+```text
+sender                 CREDIT  send_amount_usd
+FX_CLEARING_USD        DEBIT   send_amount_usd
 
-| Column          | Type          | Constraint                                        |
-|-----------------|---------------|---------------------------------------------------|
-| `entries.amount`| `BigInteger`  | 64-bit signed integer; supports values up to ≈ $92 quadrillion |
-| —               | —             | `CheckConstraint("amount > 0")` — amounts are always positive  |
+FX_CLEARING_EUR        CREDIT  receive_amount_eur
+recipient              DEBIT   receive_amount_eur
+```
 
-### Design Rationale
+Per-currency totals:
 
-- **No IEEE-754 rounding errors**: Floating-point numbers (`float`, `double`) introduce microscopic rounding errors during arithmetic.  In a financial ledger, even a fraction-of-a-cent error compounds over millions of transactions.
-- **Sign carried by direction**: The `direction` column (`DEBIT` / `CREDIT`) carries the semantic sign.  The `amount` column is always a positive integer, enforced by a database-level `CHECK` constraint.
-- **Display-only formatting**: The decimal point is reintroduced at the presentation layer (frontend JavaScript) for human readability.  The backend never divides by 100 for computation — only for display formatting via `_fmt_amount()`.
+```text
+USD: sender credit == FX USD debit
+EUR: FX EUR credit == recipient debit
+```
 
-### Capacity
-
-`BigInteger` (64-bit signed) supports values up to `9,223,372,036,854,775,807` — equivalent to approximately **$92.2 quadrillion** in cents.  This exceeds the total global money supply by several orders of magnitude.
+The receiver-currency clearing account is checked for sufficient liquidity
+before entries are posted.
 
 ---
 
-## Module Architecture
+## 5. FX Rate Snapshots and Rounding
 
-```
+The ledger accepts a caller-supplied rate snapshot. It does not fetch live rates.
+
+Core conversion steps:
+
+1. Parse `fx_rate` from a string or `Decimal`; reject Python `float`.
+2. Convert source minor units to a Decimal major-unit amount.
+3. Multiply by the rate.
+4. Quantize to the destination currency precision using `ROUND_HALF_UP`.
+5. Post the destination amount as integer minor units.
+
+The `fx_quote_snapshots` table records:
+
+- `transaction_id`
+- `from_currency`
+- `to_currency`
+- `rate`
+- `provider` and `quote_id` placeholders
+- `timestamp`
+- `rounding_mode`
+- `source_amount_minor`
+- `destination_amount_minor`
+
+This makes demo FX conversion deterministic and auditable without pretending to
+be a market-rate or quote-management system.
+
+---
+
+## 6. Idempotency
+
+`transactions.idempotency_key` is unique at the database layer. The ledger also
+stores a normalized request fingerprint for payment transactions.
+
+Behavior:
+
+- Same key and same fingerprint returns the original transaction.
+- Same key and different fingerprint raises `IdempotencyConflictError`.
+- A database `IntegrityError` on the unique idempotency constraint is recovered
+  into the same retry/conflict behavior when possible.
+
+This demonstrates the pattern. A real distributed system would also need a
+durable idempotency service or database design, request expiry policy, replay
+rules, retries, and operational observability.
+
+---
+
+## 7. Reversals
+
+`reverse_transaction()` loads the original entries and creates a new transaction
+with flipped directions. It sets:
+
+- `transaction_type = REVERSAL`
+- `reversed_transaction_id = <original transaction id>`
+- `idempotency_key = REV-<original key>`
+
+The original transaction is not mutated. The dashboard also recognizes reversal
+transactions by their `REV-` idempotency key for display compatibility.
+
+---
+
+## 8. Concurrency Demo
+
+The engine exposes a `locking_strategy` parameter:
+
+- `PESSIMISTIC`: uses SQLite `BEGIN IMMEDIATE` for demo writer serialization and
+  fetches `Account` rows with `with_for_update=True` for dialects that support
+  row locks.
+- `OCC`: uses SQLAlchemy `version_id` on `Account` and a version-touch workaround
+  so appending entries can still detect conflicting account writes.
+
+These choices are useful for observing race-condition behavior in a simulator.
+They are not a complete design for production payment safety. A production
+system would need explicit transaction isolation choices, database-specific lock
+semantics, retry/backoff policy, reconciliation, monitoring, alerting, and
+operational runbooks.
+
+---
+
+## 9. Module Architecture
+
+```text
 lightspark-payment-service/
 ├── src/
-│   ├── models.py          # State Layer — ORM models, enums, DB constants
-│   ├── ledger.py           # Behavior Layer — LedgerEngine, bootstrap, display
-│   └── api.py              # API Layer — FastAPI endpoints
-├── static/                 # Frontend — HTML, CSS, JS
+│   ├── models.py          # ORM models and enums
+│   ├── ledger.py          # LedgerEngine, bootstrap, invariants, display
+│   └── api.py             # FastAPI endpoints and request parsing
+├── static/                # Vanilla dashboard
 ├── docs/
-│   ├── ARCHITECTURE.md     # This document
-│   └── DESIGN.md           # UI/UX design guidelines
-├── AGENTS.md               # AI agent operational rules
-├── README.md               # Project overview
-└── pyproject.toml           # Poetry dependency management
+│   ├── ARCHITECTURE.md    # This document
+│   └── DESIGN.md          # Scope, limitations, and extension roadmap
+├── tests/                 # Pytest coverage for ledger/API/frontend
+└── pyproject.toml         # Poetry dependency management
 ```
 
-| Layer    | Module         | Responsibility                                              |
-|----------|----------------|-------------------------------------------------------------|
-| State    | `src/models.py`| ORM models, enums, DB path, declarative base                |
-| Behavior | `src/ledger.py`| Transaction execution, invariant checks, bootstrap, display |
-| API      | `src/api.py`   | FastAPI REST endpoints, request/response models              |
+| Layer | Module | Responsibility |
+|-------|--------|----------------|
+| State | `src/models.py` | Accounts, transactions, entries, FX quote snapshots |
+| Behavior | `src/ledger.py` | Payment execution, invariant checks, idempotency, reversals |
+| API | `src/api.py` | REST endpoints, request parsing, error mapping |
+| Dashboard | `static/` | Interactive learning UI and race simulation |

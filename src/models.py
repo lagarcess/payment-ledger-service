@@ -7,11 +7,10 @@ Defines all SQLAlchemy ORM models, enumerations, and database constants.
 This module is the **State Layer** — it describes *what* the ledger looks
 like, not *how* it behaves.
 
-Enterprise Compliance
----------------------
-- **BigInteger arithmetic**: All ``amount`` columns use ``BigInteger`` to
-  prevent 64-bit float overflow.  Monetary values are stored in minor
-  currency units (cents) — NEVER as floats.
+Educational Ledger Guarantees
+-----------------------------
+- **BigInteger arithmetic**: All posted money amounts use ``BigInteger``
+  minor units (cents for USD/EUR) instead of binary floating point.
 - **Optimistic Concurrency Control (OCC)**: The ``Account`` model carries
   a ``version_id`` column configured as SQLAlchemy's version counter.
   Any concurrent modification to the same account row will raise
@@ -76,17 +75,22 @@ class AccountType(str, enum.Enum):
     CORPORATE_FX_CLEARING = "CORPORATE_FX_CLEARING"
 
 
+class TransactionType(str, enum.Enum):
+    """Business category for an append-only journal transaction."""
+    PAYMENT = "PAYMENT"
+    REVERSAL = "REVERSAL"
+    SEED = "SEED"
+
+
 class EntryDirection(str, enum.Enum):
     """
-    Every ledger entry is either a DEBIT (money leaving an account in
-    double-entry terms) or a CREDIT (money entering).
+    Every ledger entry is either a DEBIT or a CREDIT.
 
-    Convention used here (asset-normal accounts):
+    Convention used by this educational simulator:
         DEBIT  → increases the account balance  (funds received / loaded)
         CREDIT → decreases the account balance  (funds sent / withdrawn)
 
-    For liability / clearing accounts the semantics invert, but the
-    arithmetic identity  Σ DEBIT == Σ CREDIT  always holds globally.
+    The arithmetic identity must hold independently per currency.
     """
     DEBIT = "DEBIT"
     CREDIT = "CREDIT"
@@ -170,6 +174,17 @@ class Transaction(Base):
     )
     description = Column(String(512), nullable=False)
     idempotency_key = Column(String(256), nullable=False, unique=True)
+    request_fingerprint = Column(String(128), nullable=True)
+    transaction_type = Column(
+        Enum(TransactionType),
+        nullable=False,
+        default=TransactionType.PAYMENT,
+    )
+    reversed_transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
 
     # Relationships — save-update and merge only.  NO cascade delete.
     # Immutability: entries must never be deleted via cascade.
@@ -178,6 +193,19 @@ class Transaction(Base):
         back_populates="transaction",
         lazy="select",
         cascade="save-update, merge",
+    )
+    fx_quote_snapshot = relationship(
+        "FxQuoteSnapshot",
+        back_populates="transaction",
+        lazy="select",
+        uselist=False,
+        cascade="save-update, merge",
+    )
+    reversed_transaction = relationship(
+        "Transaction",
+        remote_side=[id],
+        foreign_keys=[reversed_transaction_id],
+        lazy="select",
     )
 
     def __repr__(self) -> str:
@@ -244,4 +272,50 @@ class Entry(Base):
             f"Entry(id={self.id}, txn={self.transaction_id}, "
             f"acct={self.account_id}, {self.direction.value} "
             f"{self.amount})"
+        )
+
+
+class FxQuoteSnapshot(Base):
+    """
+    Immutable exchange-rate snapshot used by a cross-currency transaction.
+
+    The ledger accepts a caller-supplied rate/quote and records the exact
+    string used for conversion.  Money amounts remain integer minor units;
+    the rate is audit metadata, not a posted ledger amount.
+    """
+    __tablename__ = "fx_quote_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    transaction_id = Column(
+        Integer,
+        ForeignKey("transactions.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    from_currency = Column(String(3), nullable=False)
+    to_currency = Column(String(3), nullable=False)
+    rate = Column(String(64), nullable=False)
+    provider = Column(String(128), nullable=True)
+    quote_id = Column(String(128), nullable=True)
+    timestamp = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    rounding_mode = Column(String(32), nullable=False)
+    source_amount_minor = Column(BigInteger, nullable=False)
+    destination_amount_minor = Column(BigInteger, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("source_amount_minor > 0", name="ck_fx_source_positive"),
+        CheckConstraint("destination_amount_minor > 0", name="ck_fx_destination_positive"),
+        Index("ix_fx_quote_transaction", "transaction_id"),
+    )
+
+    transaction = relationship("Transaction", back_populates="fx_quote_snapshot")
+
+    def __repr__(self) -> str:
+        return (
+            f"FxQuoteSnapshot(txn={self.transaction_id}, "
+            f"{self.from_currency}->{self.to_currency} @ {self.rate})"
         )

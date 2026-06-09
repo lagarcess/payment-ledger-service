@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 import os
 import uuid
@@ -11,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
@@ -19,10 +20,14 @@ from .models import (
     DATABASE_URL,
     Account,
     AccountType,
+    Entry,
+    FxQuoteSnapshot,
+    Transaction,
 )
 from .ledger import (
     ConcurrencyConflictError,
     DuplicateTransactionError,
+    IdempotencyConflictError,
     InsufficientFundsError,
     LedgerEngine,
     TransactionNotFoundError,
@@ -312,14 +317,42 @@ def health_check():
 class PaymentRequest(BaseModel):
     sender_id: int
     receiver_id: int
-    send_dollars: float
-    fx_rate: float
+    send_amount_minor: Optional[StrictInt] = None
+    send_amount: Optional[str] = None
+    fx_rate: Optional[str] = None
     idempotency_key: Optional[str] = None
     locking_strategy: Optional[str] = "PESSIMISTIC"
 
 class ResetResponse(BaseModel):
     status: str
     message: str
+
+
+def _parse_decimal_amount_to_minor(raw_amount: str) -> int:
+    try:
+        amount = Decimal(str(raw_amount).strip())
+    except (InvalidOperation, AttributeError) as exc:
+        raise HTTPException(status_code=400, detail="Amount must be a decimal string.") from exc
+
+    if not amount.is_finite() or amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive.")
+
+    rounded = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return int(rounded.scaleb(2).to_integral_exact())
+
+
+def _request_amount_minor(req: PaymentRequest) -> int:
+    if req.send_amount_minor is not None:
+        if req.send_amount_minor <= 0:
+            raise HTTPException(status_code=400, detail="send_amount_minor must be positive.")
+        return req.send_amount_minor
+
+    if req.send_amount is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide send_amount_minor or send_amount.",
+        )
+    return _parse_decimal_amount_to_minor(req.send_amount)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ROUTES
@@ -331,11 +364,18 @@ def get_state():
     ensure_bootstrapped()
     
     with SessionLocal() as sf:
-        # 1. Check Invariant
-        net = int(sf.execute(text(
-            "SELECT COALESCE(SUM(CASE WHEN direction='DEBIT' THEN amount "
-            "WHEN direction='CREDIT' THEN -amount END), 0) FROM entries"
-        )).scalar())
+        # 1. Check currency-aware invariant
+        per_currency = ledger.get_currency_invariant_balances()
+        transaction_imbalances = ledger.get_transaction_currency_imbalances()
+        imbalances = {
+            currency: net
+            for currency, net in per_currency.items()
+            if net != 0
+        }
+        net = (
+            sum(abs(value) for value in imbalances.values())
+            + sum(abs(row["net"]) for row in transaction_imbalances)
+        )
         
         # 2. Get Totals
         r = sf.execute(text(
@@ -379,7 +419,8 @@ def get_state():
             
         # 5. Get Data Table Data (Transactions)
         txn_rows = sf.execute(text("""
-            SELECT t.id, t.timestamp, t.idempotency_key, t.description, COUNT(e.id) as legs
+            SELECT t.id, t.timestamp, t.idempotency_key, t.description,
+                   t.transaction_type, t.reversed_transaction_id, COUNT(e.id) as legs
             FROM transactions t
             LEFT JOIN entries e ON e.transaction_id = t.id
             GROUP BY t.id ORDER BY t.id
@@ -395,7 +436,9 @@ def get_state():
                 "timestamp": row[1],
                 "idempotency_key": row[2],
                 "description": row[3],
-                "legs": row[4]
+                "transaction_type": str(row[4]).replace("TransactionType.", ""),
+                "reversed_transaction_id": row[5],
+                "legs": row[6]
             })
             
         # 6. Get Data Table Data (Entries)
@@ -421,7 +464,10 @@ def get_state():
     return {
         "invariant": {
             "net": net,
-            "balanced": net == 0
+            "balanced": not imbalances and not transaction_imbalances,
+            "per_currency": per_currency,
+            "imbalances": imbalances,
+            "transaction_imbalances": transaction_imbalances,
         },
         "metrics": {
             "total_debits_cents": total_debits,
@@ -448,23 +494,49 @@ def execute_payment(req: PaymentRequest):
     ensure_bootstrapped()
     ids = app_state["account_ids"]
     
-    send_cents = round(req.send_dollars * 100)
+    send_cents = _request_amount_minor(req)
     idem_key = req.idempotency_key or f"PAY-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
     
     if req.sender_id == req.receiver_id:
         raise HTTPException(status_code=400, detail="Sender and Receiver must differ")
         
     try:
-        txn = ledger.execute_cross_currency_payment(
-            sender_id=req.sender_id,
-            receiver_id=req.receiver_id,
-            send_amount=send_cents,
-            fx_rate=req.fx_rate,
-            idempotency_key=idem_key,
-            fx_clearing_usd_id=ids["fx_usd"],
-            fx_clearing_eur_id=ids["fx_eur"],
-            locking_strategy=req.locking_strategy or "PESSIMISTIC",
-        )
+        with SessionLocal() as session:
+            sender = session.get(Account, req.sender_id)
+            receiver = session.get(Account, req.receiver_id)
+
+        if sender is not None and receiver is not None and sender.currency == receiver.currency:
+            txn = ledger.execute_same_currency_payment(
+                sender_id=req.sender_id,
+                receiver_id=req.receiver_id,
+                send_amount=send_cents,
+                idempotency_key=idem_key,
+                locking_strategy=req.locking_strategy or "PESSIMISTIC",
+            )
+        else:
+            if req.fx_rate is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="fx_rate is required for cross-currency payments.",
+                )
+            sender_fx_id = ids.get(f"fx_{sender.currency.lower()}") if sender else ids["fx_usd"]
+            receiver_fx_id = ids.get(f"fx_{receiver.currency.lower()}") if receiver else ids["fx_eur"]
+            if sender_fx_id is None or receiver_fx_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No FX clearing account is configured for this currency route.",
+                )
+
+            txn = ledger.execute_cross_currency_payment(
+                sender_id=req.sender_id,
+                receiver_id=req.receiver_id,
+                send_amount=send_cents,
+                fx_rate=req.fx_rate,
+                idempotency_key=idem_key,
+                fx_clearing_usd_id=sender_fx_id,
+                fx_clearing_eur_id=receiver_fx_id,
+                locking_strategy=req.locking_strategy or "PESSIMISTIC",
+            )
         
         app_state["pay_n"] = app_state.get("pay_n", 0) + 1
         return {
@@ -477,13 +549,82 @@ def execute_payment(req: PaymentRequest):
         
     except DuplicateTransactionError as e:
         raise HTTPException(status_code=409, detail=f"Idempotency Rejection: {str(e)}")
+    except IdempotencyConflictError as e:
+        raise HTTPException(status_code=409, detail=f"Idempotency Conflict: {str(e)}")
     except InsufficientFundsError as e:
         raise HTTPException(status_code=400, detail=f"Overdraft Prevention: {str(e)}")
     except ConcurrencyConflictError as e:
         raise HTTPException(status_code=409, detail=f"Concurrency Conflict (OCC): {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logging.exception("Payment execution failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/transactions/{transaction_id}")
+def get_transaction(transaction_id: int):
+    """Return an auditable transaction view with entries and FX snapshot."""
+    ensure_bootstrapped()
+
+    with SessionLocal() as session:
+        txn = session.get(Transaction, transaction_id)
+        if txn is None:
+            raise HTTPException(status_code=404, detail="Transaction not found.")
+
+        entries = (
+            session.query(Entry)
+            .join(Account)
+            .filter(Entry.transaction_id == transaction_id)
+            .order_by(Entry.id)
+            .all()
+        )
+        fx_snapshot = (
+            session.query(FxQuoteSnapshot)
+            .filter(FxQuoteSnapshot.transaction_id == transaction_id)
+            .first()
+        )
+        reversal = (
+            session.query(Transaction)
+            .filter(Transaction.reversed_transaction_id == transaction_id)
+            .first()
+        )
+
+        return {
+            "id": txn.id,
+            "timestamp": txn.timestamp,
+            "description": txn.description,
+            "idempotency_key": txn.idempotency_key,
+            "transaction_type": txn.transaction_type.value,
+            "request_fingerprint": txn.request_fingerprint,
+            "reversed_transaction_id": txn.reversed_transaction_id,
+            "is_reversed": reversal is not None,
+            "reversal_transaction_id": reversal.id if reversal is not None else None,
+            "entries": [
+                {
+                    "id": entry.id,
+                    "account_id": entry.account_id,
+                    "account_name": entry.account.name,
+                    "currency": entry.account.currency,
+                    "direction": entry.direction.value,
+                    "amount_minor": entry.amount,
+                }
+                for entry in entries
+            ],
+            "fx_quote_snapshot": None if fx_snapshot is None else {
+                "from_currency": fx_snapshot.from_currency,
+                "to_currency": fx_snapshot.to_currency,
+                "rate": fx_snapshot.rate,
+                "provider": fx_snapshot.provider,
+                "quote_id": fx_snapshot.quote_id,
+                "timestamp": fx_snapshot.timestamp,
+                "rounding_mode": fx_snapshot.rounding_mode,
+                "source_amount_minor": fx_snapshot.source_amount_minor,
+                "destination_amount_minor": fx_snapshot.destination_amount_minor,
+            },
+        }
 
 
 @app.post("/api/reverse/{transaction_id}")

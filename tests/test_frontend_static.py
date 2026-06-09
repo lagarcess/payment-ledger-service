@@ -105,3 +105,43 @@ def test_quick_guide_is_language_aware_and_designed():
     assert "guideRaceBody" in script
     assert ".quick-guide" in css
     assert ".guide-card" in css
+
+
+def test_frontend_posts_minor_units_and_string_fx_rate():
+    script = (ROOT / "static" / "script.js").read_text()
+
+    assert "send_amount_minor:" in script
+    assert "send_dollars:" not in script
+    assert "fx_rate: String(els.fxRate.value)" in script
+    assert "fx_rate: parseFloat" not in script
+
+
+def test_visible_copy_frames_app_as_simulator():
+    html = (ROOT / "static" / "index.html").read_text()
+    script = (ROOT / "static" / "script.js").read_text()
+
+    assert "Ledger Simulator" in html
+    assert "Educational double-entry ledger" in html
+    assert "Currency Invariant" in script
+    assert "concurrency tradeoffs in the SQLite demo" in script
+
+
+def test_readme_disclaims_demo_scope_without_overclaiming():
+    readme = (ROOT / "README.md").read_text()
+
+    assert (
+        "This project is an educational multi-currency ledger simulator. "
+        "It demonstrates double-entry accounting, FX clearing, idempotency, "
+        "reversals, and concurrency tradeoffs, but it is not production "
+        "payment infrastructure."
+    ) in readme
+
+    banned_claims = [
+        "enterprise-grade",
+        "production banking infrastructure",
+        "compliance-grade",
+        "bank-grade",
+    ]
+    lowered = readme.lower()
+    for claim in banned_claims:
+        assert claim not in lowered

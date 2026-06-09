@@ -1,28 +1,32 @@
 # Agent Instructions: Lightspark Payment Service
 
-Welcome! You are operating in the `lightspark-payment-service` codebase. This is a **double-entry payment ledger engine** designed to execute cross-currency transfers with enterprise-grade compliance guarantees.
+Welcome! You are operating in the `lightspark-payment-service` codebase. This
+is an **educational multi-currency payment ledger simulator**. It demonstrates
+double-entry ledger mechanics, FX clearing, idempotency, reversals, and
+concurrency tradeoffs, but it is not production payment infrastructure.
 
 ## Technology Stack
+
 - **Backend:** Python 3.10+, FastAPI, SQLAlchemy, SQLite
 - **Frontend:** Vanilla HTML5, JavaScript, CSS (No JS frameworks)
 - **Dependency Management:** Poetry (`pyproject.toml`)
 - **Key Files:**
-  - `src/models.py`: State Layer — ORM models (`Account`, `Transaction`, `Entry`), enumerations, DB constants.
-  - `src/ledger.py`: Behavior Layer — `LedgerEngine` class, custom exceptions, append-only bootstrap, display utilities.
-  - `src/api.py`: API Layer — FastAPI server exposing endpoints for state, payment execution, and reset.
+  - `src/models.py`: ORM models (`Account`, `Transaction`, `Entry`, FX snapshots), enumerations, DB constants.
+  - `src/ledger.py`: `LedgerEngine`, custom exceptions, append-only bootstrap, invariant checks.
+  - `src/api.py`: FastAPI server exposing state, payment execution, transaction audit, reversal, and reset endpoints.
   - `static/`: Frontend assets (`index.html`, `style.css`, `script.js`).
-  - `docs/ARCHITECTURE.md`: Enterprise compliance mechanisms documentation.
-  - `docs/DESIGN.md`: UI/UX design guidelines and token system.
+  - `docs/ARCHITECTURE.md`: Accounting and implementation notes.
+  - `docs/DESIGN.md`: Scope, design choices, limitations, and extension roadmap.
 
 ---
 
-## ⛔ STRICT PROHIBITIONS — ABSOLUTE RULES
+## Strict Ledger Safety Rules
 
-> **These rules are NON-NEGOTIABLE.  Violation of any rule below constitutes a critical system failure.  There are NO exceptions.**
+These rules protect the learning value and accounting correctness of the demo.
 
-### 1. NEVER Write SQL `DELETE` or `UPDATE` Against Ledger Tables
+### 1. Do Not Destructively Modify Posted Ledger Rows
 
-You MUST NOT, under any circumstances, write or execute:
+Do not write or execute:
 
 - A SQL `DELETE` statement against the `entries` or `transactions` tables.
 - A SQL `UPDATE` statement that modifies `amount`, `direction`, `account_id`, or `transaction_id` columns on the `entries` table.
@@ -30,142 +34,135 @@ You MUST NOT, under any circumstances, write or execute:
 - Any SQLAlchemy `.delete()` call against `Entry` or `Transaction` objects.
 - Any `cascade="all, delete-orphan"` configuration on ledger relationships.
 
-**Correction mechanism:** If a transaction was recorded incorrectly, the ONLY acceptable fix is to create a **new reversal transaction** with new append-only entries that cancel the effect of the original.
+Correction mechanism: if a transaction was recorded incorrectly, create a new
+reversal transaction with new append-only entries that cancel the effect of the
+original.
 
-### 2. NEVER Use Floating-Point Numbers for Monetary Amounts
+### 2. Keep Posted Money Amounts as Integer Minor Units
 
-You MUST NOT, under any circumstances:
+Do not:
 
-- Store monetary amounts as `Float`, `Numeric`, `Decimal`, or any non-integer type in the database.
-- Perform monetary arithmetic using Python `float` or `Decimal` types.  All monetary math uses Python `int`.
+- Store posted monetary amounts as `Float`, `Numeric`, `Decimal`, or any non-integer type in the database.
+- Perform posted balance arithmetic with Python `float`.
 - Remove or weaken the `CheckConstraint("amount > 0")` on the `entries` table.
-- Remove or downgrade `BigInteger` to `Integer` on the `amount` column.
+- Remove or downgrade `BigInteger` on posted amount columns.
 
-**The ONLY acceptable type for monetary amounts is `BigInteger` at the database level and `int` at the Python level.  The decimal point exists exclusively at the presentation layer.**
+The ledger posts money as `BigInteger` at the database level and `int` in Python.
+The decimal point exists at API/frontend boundaries and in FX-rate conversion.
+`Decimal` is allowed for parsing caller-supplied FX rates and display amounts,
+then the result must be quantized into integer minor units before entries are
+created. Do not store FX rates as floating-point values; store the supplied rate
+snapshot as text metadata.
 
-### 3. NEVER Bypass the Double-Entry Invariant
+### 3. Preserve Double-Entry and Currency-Aware Invariants
 
-You MUST NOT:
+Do not:
 
-- Create an `Entry` without a corresponding opposite `Entry` in the same `Transaction`.
-- Create a `Transaction` where `Σ DEBIT amounts ≠ Σ CREDIT amounts`.
-- Directly update an account balance.  Balances are always computed from the sum of entries.
+- Create an `Entry` without the corresponding balancing entry legs in the same `Transaction`.
+- Create a transaction where `SUM(DEBIT) != SUM(CREDIT)` for any involved currency.
+- Let a USD imbalance be hidden by an opposite EUR imbalance.
+- Add a `MULTI` account that allows currencies to net against each other.
+- Directly update account balances. Balances are derived from immutable entries.
 
-### 4. NEVER Remove Immutability Guards
+Current sign convention:
 
-You MUST NOT:
+- `DEBIT` increases an account balance.
+- `CREDIT` decreases an account balance.
 
-- Change `ondelete="RESTRICT"` to `"CASCADE"` or `"SET NULL"` on any Foreign Key in `Entry`.
-- Add `cascade="all, delete-orphan"` to any relationship on `Transaction` or `Account`.
-- Remove the `version_id` (OCC) column from `Account`.
+Keep this convention unless you deliberately update all code, tests, docs, and
+UI copy together.
 
-### 5. NEVER Break the Concurrency Engine
-You MUST NOT:
+### 4. Preserve Immutability Guards
+
+Do not:
+
+- Change `ondelete="RESTRICT"` to `"CASCADE"` or `"SET NULL"` on any `Entry` foreign key.
+- Add delete cascades to `Transaction`, `Account`, or FX snapshot relationships.
+- Remove the `version_id` column from `Account`.
+
+### 5. Keep Concurrency Claims and Code Honest
+
+Do not:
+
 - Remove the `locking_strategy` parameter from payment execution flows.
-- Mix concurrency models (e.g., do not attempt to use `flag_modified` inside a `PESSIMISTIC` lock path).
-- Apply `.with_for_update()` to aggregate sum queries. It must only be applied directly to the `Account` row fetch.
-- Remove the `BEGIN IMMEDIATE` SQLite workaround for pessimistic locking.
+- Mix concurrency models, such as using the OCC version-touch path inside the pessimistic path.
+- Apply `.with_for_update()` to aggregate sum queries. It may only be applied directly to `Account` row fetches.
+- Remove the `BEGIN IMMEDIATE` SQLite workaround without replacing the pessimistic demo behavior.
+
+Document SQLite locking as a simulator constraint. It is not equivalent to a
+full production row-locking or distributed payment-safety design.
 
 ---
 
-## Core Principles & Invariants
+## Core Principles
 
-When modifying this codebase, you MUST adhere to the following fintech and accounting principles:
-
-1. **Double-Entry Accounting & System Invariants:** 
-   - Every transaction must be perfectly balanced (`Σ debits == Σ credits`). 
-   - The global system invariant dictates that the net balance of all accounts combined is exactly zero at all times.
-   - Do NOT simply update a balance. Money must move from one account to another using equal and opposite journal entries.
-2. **Integer Arithmetic (Minor Units):** 
-   - Never use floats for currency. All monetary amounts are stored and calculated as integers (e.g., cents for USD/EUR, where $100.00 is `10000`).
-3. **Cross-Currency FX Clearing:** 
-   - Payments between different currencies (e.g., USD to EUR) route through internal "Corporate FX Clearing" accounts. Do not directly convert and move money between end-user accounts of different currencies.
-4. **ACID Transactions:** 
-   - Ledger entry creations are wrapped in strict `with session.begin():` blocks. If any leg fails or overdrafts, the entire operation rolls back.
-5. **Idempotency:** 
-   - Every request uses a unique `idempotency_key` enforced by a database constraint to prevent duplicate transactions.
-6. **Overdraft Protection:** 
-   - End-user accounts cannot drop below a zero balance. Always check for sufficient funds and raise an `InsufficientFundsError` if necessary.
-7. **Toggleable Concurrency Control:**
-   - The system supports both Pessimistic and Optimistic Concurrency Control (OCC) selectable at runtime. Future features must respect and support this toggleable architecture.
-8. **Pessimistic Row Locking:**
-   - Lock `Account` rows with `.with_for_update()` *before* computing aggregate balances. SQLite environments must prefix this with a `BEGIN IMMEDIATE` session execution to emulate row-level blocking.
-9. **Optimistic Concurrency Control (OCC):**
-   - Because appending `Entry` rows does not natively bump the parent `Account` version, you must use SQLAlchemy's `flag_modified(account, "name")` to force the version increment at commit time.
+1. **Double-entry accounting:** Every transaction balances per currency.
+2. **Integer minor units:** Posted money amounts are integers.
+3. **FX clearing:** Cross-currency payments route through currency-specific clearing accounts.
+4. **ACID transaction blocks:** Multi-leg operations commit or roll back atomically.
+5. **Idempotency:** Unique keys and request fingerprints prevent duplicate posting.
+6. **Overdraft protection:** End-user accounts cannot drop below zero.
+7. **Append-only corrections:** Use reversals, not destructive edits.
+8. **Honest scope:** This is a prototype and learning project, not payment infrastructure.
 
 ---
 
 ## Development Workflow
 
 ### Running the App
-The project uses Poetry. Run commands using `poetry run`.
 
-1. **Seed/Reset the database:**
-   ```bash
-   poetry run python -m src.ledger
-   ```
-2. **Start the development server:**
-   ```bash
-   poetry run uvicorn src.api:app --reload
-   ```
+Use Poetry:
 
-The dashboard will be available at `http://127.0.0.1:8000/`.
+```bash
+poetry run python -m src.ledger
+poetry run uvicorn src.api:app --reload
+```
+
+The dashboard is available at `http://127.0.0.1:8000/`.
 
 ### Modifying the Frontend
-- The frontend is located in the `static/` directory.
-- It uses vanilla HTML/JS/CSS. Do not introduce frameworks like React or Tailwind unless explicitly requested by the user.
-- The `docs/DESIGN.md` file contains design guidelines and analysis (a sleek dark interface, gradient cards, fintech precision). Consult this file before making UI or aesthetic changes.
+
+- The frontend is in `static/`.
+- It uses vanilla HTML/JS/CSS. Do not introduce React, Tailwind, or another framework unless the user explicitly requests it.
+- Keep API compatibility with the dashboard. The UI may display decimal dollars, but payment requests should prefer `send_amount_minor` and string `fx_rate`.
 
 ### Making Changes
-- **Database Schema:** If you change the SQLAlchemy models in `src/models.py`, you may need to recreate the database (the `/api/reset` endpoint or running `src/ledger.py` directly handles dropping and recreating tables).
-- **Testing:** Ensure any new transaction types strictly preserve the double-entry principles and the global system invariant of zero.
-- **Architecture Reference:** See `docs/ARCHITECTURE.md` for detailed documentation of compliance mechanisms.
+
+- If you change SQLAlchemy models, recreate the demo database via `/api/reset` or `poetry run python -m src.ledger`.
+- Add or update tests for accounting, FX rounding, idempotency, reversals, and API behavior.
+- Keep docs clear about known limitations and future production concerns.
 
 ---
 
 ## Git Commit Instructions
 
-Generate a commit message following **Conventional Commits** specifications.
+Generate commit messages following Conventional Commits.
 
-### Format
-```
+Format:
+
+```text
 <type>(scope): <short summary>
-
-[optional body]
-
-[optional footer(s)]
 ```
 
-### Requirements
+Requirements:
+
 - **Types:** `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `build`, `ci`
-- **Scope:** Optional but preferred (module, feature, or file area)
-- **Summary:** Imperative mood (e.g., "add", "fix", "update"), max 72 characters, no trailing period
-- **Body (ONLY if needed):** Explain WHY, not WHAT. Include context, trade-offs, or side-effects
-- **Footer (if applicable):** `BREAKING CHANGE: <description>`, `Closes #<issue-number>`
+- **Scope:** Optional but preferred.
+- **Summary:** Imperative mood, max 72 characters, no trailing period.
+- **Body:** Only if needed; explain why, not what.
+- **Footer:** Use for breaking changes or issue closure.
 
-### Rules
-- Avoid vague messages like "updated code" or "fix stuff"
-- Prefer atomic, single-purpose commits
-- Infer intent from diff, not just file names
-- Highlight user-facing impact when relevant
+Suggested message for this refactor:
 
-### Guidance
-- Prioritize semantic clarity over brevity when needed
-- If multiple logical changes exist, suggest splitting commits
-- Identify hidden intent (bug fix vs refactor vs feature)
-- Detect and label breaking changes explicitly
-- For **refactors**: confirm no behavior change
-- For **fixes**: describe root cause if inferable
-- For **features**: mention user benefit or capability added
-- Maintain consistency with repository commit history style
+```text
+refactor(ledger): reframe simulator and enforce currency-aware invariants
+```
 
 ---
 
 ## Pull Request Instructions
 
-Generate a structured pull request description with the following sections:
-
-### Template
+Use this structure:
 
 ```markdown
 ## Summary
@@ -197,13 +194,3 @@ Generate a structured pull request description with the following sections:
 - [ ] Docs updated (if needed)
 - [ ] Backward compatibility considered
 ```
-
-### Guidance
-- Be explicit about intent, not just implementation
-- Highlight breaking changes clearly
-- Avoid generic summaries like "various fixes"
-- Prefer structured formatting over paragraphs
-- Use bullet points for readability
-- Align tone with professional engineering standards
-- Ensure traceability to issues, tickets, or discussions
-- Add relevant existing labels to the PR; if no relevant labels exist, create them

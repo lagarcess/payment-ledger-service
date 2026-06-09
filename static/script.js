@@ -134,17 +134,17 @@ function setBackendFailureStatus(err) {
 
 const i18n = {
     en: {
-        sbTitle: "Payment Terminal", sbDesc: "Execute cross-currency transfers through the FX clearing engine.",
+        sbTitle: "Payment Terminal", sbDesc: "Simulate cross-currency transfers through the FX clearing engine.",
         langTitle: "Language", lblSenderReceiver: "Sender & Receiver", lblSender: "Sender", lblReceiver: "Receiver",
         lblPaymentParams: "Payment Parameters", lblAmount: "Amount", lblFxRate: "FX Rate", lblIdempotency: "Idempotency",
         lblAutoGenerate: "Auto-generate key", btnExecute: "Execute Payment", btnReset: "Reset Database",
-        mainTitle: "Ledger Engine", mainSubtitle: "Double-entry payment ledger · Cross-currency FX clearing · Real-time invariant monitoring",
+        mainTitle: "Ledger Simulator", mainSubtitle: "Educational double-entry ledger · FX clearing · Currency-aware invariant monitoring",
         guideEyebrow: "Quick guide", guideTitle: "Read the ledger in four moves",
-        guideIntro: "Use this as a live audit console: configure a backend, send money, then inspect the invariant and legs.",
+        guideIntro: "Use this as a learning console: configure a backend, send money, then inspect the invariant and legs.",
         guideConnectTitle: "Connect", guideConnectBody: "Open the gear, Warm the backend, or paste the API URL if Render is different.",
         guidePaymentTitle: "Transfer", guidePaymentBody: "Choose sender, receiver, amount, and FX rate; the engine routes through clearing accounts.",
-        guideInvariantTitle: "Verify", guideInvariantBody: "The invariant card should stay balanced while every debit and credit appears in the ledger legs.",
-        guideRaceTitle: "Stress", guideRaceBody: "Switch locking modes and simulate a race to see one double-spend attempt rejected.",
+        guideInvariantTitle: "Verify", guideInvariantBody: "The invariant card checks each currency independently while every debit and credit appears in the ledger legs.",
+        guideRaceTitle: "Stress", guideRaceBody: "Switch locking modes and simulate a race to see concurrency tradeoffs in the SQLite demo.",
         metDebits: "TOTAL DEBITS", metCredits: "TOTAL CREDITS", metTxns: "TRANSACTIONS", metEntries: "ENTRIES",
         flowTitle: "Payment Flow", flowDesc: "Cross-currency settlement path through the Corporate FX Clearing Account.",
         accTitle: "Accounts", accDesc: "FX Clearing rows highlighted with subtle tint.",
@@ -152,8 +152,8 @@ const i18n = {
         tabJournal: "Journal Entries", tabLegs: "Ledger Legs", txnsTitle: "Transactions",
         thTimestamp: "TIMESTAMP", thIdemKey: "IDEMPOTENCY KEY", thDesc: "DESCRIPTION", thLegs: "LEGS",
         entriesTitle: "Entry Legs", entriesDesc: "DEBIT in teal · CREDIT in red.", thTxn: "TXN", thDirection: "DIRECTION", thAmount: "AMOUNT",
-        balPrefix: "Balance: ", rcvPrefix: "Receiver gets ", invBalanced: "PERFECTLY BALANCED (0.00) ─ Σ Debits == Σ Credits",
-        invImbalance: "IMBALANCE DETECTED ─ Net: ", invLabel: "System Invariant", userCount: " user", usersCount: " users",
+        balPrefix: "Balance: ", rcvPrefix: "Receiver gets ", invBalanced: "BALANCED BY CURRENCY ─ Σ Debits == Σ Credits per currency",
+        invImbalance: "IMBALANCE DETECTED ─ ", invLabel: "Currency Invariant", userCount: " user", usersCount: " users",
         accountCount: " account", accountsCount: " accounts", footerPayments: "Payments this session: ",
         toastSuccess: "Success", toastError: "Error", toastReset: "Reset", msgDbReset: "Database reset to seed state.",
         errBackend: "Backend unavailable. Warm it from settings or check the API URL.", errPayment: "Network error executing payment.", errReset: "Failed to reset database.",
@@ -184,17 +184,17 @@ const i18n = {
         errRaceNet: "Race simulation network error.", errRevNet: "Network error during reversal."
     },
     es: {
-        sbTitle: "Terminal de Pagos", sbDesc: "Ejecución de transferencias multidivisa mediante el motor de compensación.",
+        sbTitle: "Terminal de Pagos", sbDesc: "Simule transferencias multidivisa mediante el motor de compensación.",
         langTitle: "Idioma", lblSenderReceiver: "Origen y Destino", lblSender: "Cuenta de Origen", lblReceiver: "Cuenta de Destino",
         lblPaymentParams: "Detalles de la Operación", lblAmount: "Monto", lblFxRate: "Tipo de Cambio", lblIdempotency: "Idempotencia",
         lblAutoGenerate: "Generar clave automáticamente", btnExecute: "Procesar Transferencia", btnReset: "Reiniciar Entorno",
-        mainTitle: "Motor Contable", mainSubtitle: "Libro mayor de partida doble · Compensación cambiaria · Monitoreo de invariantes",
+        mainTitle: "Simulador Contable", mainSubtitle: "Ledger educativo de partida doble · Compensación cambiaria · Invariantes por divisa",
         guideEyebrow: "Guía rápida", guideTitle: "Lea el ledger en cuatro pasos",
-        guideIntro: "Úselo como una consola de auditoría en vivo: configure el backend, envíe fondos y revise el invariante y los apuntes.",
+        guideIntro: "Úselo como una consola de aprendizaje: configure el backend, envíe fondos y revise el invariante y los apuntes.",
         guideConnectTitle: "Conectar", guideConnectBody: "Abra el engrane, active el backend o pegue la URL de API si Render es distinto.",
         guidePaymentTitle: "Transferir", guidePaymentBody: "Elija origen, destino, monto y tipo de cambio; el motor liquida por cuentas de compensación.",
-        guideInvariantTitle: "Verificar", guideInvariantBody: "El invariante debe seguir balanceado mientras cada cargo y abono aparece en el libro mayor.",
-        guideRaceTitle: "Estresar", guideRaceBody: "Cambie el modo de bloqueo y simule una carrera para ver un doble gasto rechazado.",
+        guideInvariantTitle: "Verificar", guideInvariantBody: "El invariante revisa cada divisa por separado mientras cada cargo y abono aparece en el libro mayor.",
+        guideRaceTitle: "Estresar", guideRaceBody: "Cambie el modo de bloqueo y simule una carrera para ver las limitaciones de concurrencia del demo SQLite.",
         metDebits: "CARGOS TOTALES", metCredits: "ABONOS TOTALES", metTxns: "OPERACIONES", metEntries: "APUNTES CONTABLES",
         flowTitle: "Flujo de Fondos", flowDesc: "Ruta de liquidación multidivisa a través de las cuentas de compensación.",
         accTitle: "Cuentas", accDesc: "Cuentas de compensación resaltadas.",
@@ -202,8 +202,8 @@ const i18n = {
         tabJournal: "Registro de Operaciones", tabLegs: "Libro Mayor", txnsTitle: "Operaciones",
         thTimestamp: "FECHA", thIdemKey: "CLAVE DE IDEMPOTENCIA", thDesc: "CONCEPTO", thLegs: "APUNTES",
         entriesTitle: "Apuntes Contables", entriesDesc: "CARGO en turquesa · ABONO en rojo.", thTxn: "OP", thDirection: "NATURALEZA", thAmount: "IMPORTE",
-        balPrefix: "Saldo: ", rcvPrefix: "Destino recibe ", invBalanced: "BALANCE PERFECTO (0.00) ─ Σ Cargos == Σ Abonos",
-        invImbalance: "DESCUADRE DETECTADO ─ Neto: ", invLabel: "Invariante del Sistema", userCount: " usuario", usersCount: " usuarios",
+        balPrefix: "Saldo: ", rcvPrefix: "Destino recibe ", invBalanced: "BALANCE POR DIVISA ─ Σ Cargos == Σ Abonos en cada divisa",
+        invImbalance: "DESCUADRE DETECTADO ─ ", invLabel: "Invariante por Divisa", userCount: " usuario", usersCount: " usuarios",
         accountCount: " cuenta", accountsCount: " cuentas", footerPayments: "Pagos procesados en esta sesión: ",
         toastSuccess: "Éxito", toastError: "Error", toastReset: "Reiniciado", msgDbReset: "Entorno restaurado a su estado inicial.",
         errBackend: "Motor no disponible. Actívelo desde ajustes o revise la URL de API.", errPayment: "Error de red procesando la transferencia.", errReset: "Error al reiniciar el entorno.",
@@ -672,7 +672,7 @@ function render() {
         <div class="inv-details">
             <div class="inv-label">${t('invLabel')}</div>
             <div class="inv-value ${inv.balanced ? 'ok' : 'err'}">
-                ${inv.balanced ? t('invBalanced') : t('invImbalance') + (inv.net/100).toFixed(2)}
+                ${inv.balanced ? t('invBalanced') : t('invImbalance') + formatInvariantImbalances(inv)}
             </div>
         </div>
     `;
@@ -830,6 +830,16 @@ function updateFormState() {
     `.trim();
 }
 
+function formatInvariantImbalances(inv) {
+    const entries = Object.entries(inv.imbalances || {});
+    if (entries.length === 0) {
+        return (inv.net / 100).toFixed(2);
+    }
+    return entries
+        .map(([currency, minor]) => `${currency} ${(minor / 100).toFixed(2)}`)
+        .join(' · ');
+}
+
 function removeSkeletons() {
     document.querySelectorAll('.skeleton').forEach(el => el.classList.remove('skeleton'));
     document.querySelectorAll('.skeleton-text').forEach(el => el.classList.remove('skeleton-text'));
@@ -879,8 +889,8 @@ async function executePayment() {
     const payload = {
         sender_id: parseInt(els.sender.value),
         receiver_id: parseInt(els.receiver.value),
-        send_dollars: parseFloat(els.amount.value),
-        fx_rate: parseFloat(els.fxRate.value),
+        send_amount_minor: Math.round((parseFloat(els.amount.value) || 0) * 100),
+        fx_rate: String(els.fxRate.value),
         idempotency_key: els.autoKey.checked ? els.idemKeyDisplay.textContent : els.idemKeyInput.value,
         locking_strategy: els.lockingStrategy.value
     };
@@ -953,13 +963,11 @@ async function simulateDoubleSpend() {
     }
 
     const strategy = els.lockingStrategy.value;
-    const fxRate = parseFloat(els.fxRate.value);
-
     const basePayload = {
         sender_id: senderId,
         receiver_id: receiverId,
-        send_dollars: drainDollars,
-        fx_rate: fxRate,
+        send_amount_minor: sender.balance_cents,
+        fx_rate: String(els.fxRate.value),
         locking_strategy: strategy,
     };
 
