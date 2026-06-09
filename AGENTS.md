@@ -16,7 +16,9 @@ concurrency tradeoffs, but it is not production payment infrastructure.
   - `src/api.py`: FastAPI server exposing state, payment execution, transaction audit, reversal, and reset endpoints.
   - `static/`: Frontend assets (`index.html`, `style.css`, `script.js`).
   - `docs/ARCHITECTURE.md`: Accounting and implementation notes.
-  - `docs/DESIGN.md`: Scope, design choices, limitations, and extension roadmap.
+  - `docs/DESIGN.md`: Index for the separate design documents.
+  - `docs/engineering-design/DESIGN.md`: Ledger behavior, design choices, limitations, and extension roadmap.
+  - `docs/product-design/DESIGN.md`: Dashboard UX, UI, visual language, and copy guidance.
 
 ---
 

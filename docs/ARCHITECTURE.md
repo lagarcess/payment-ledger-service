@@ -194,7 +194,11 @@ lightspark-payment-service/
 ├── static/                # Vanilla dashboard
 ├── docs/
 │   ├── ARCHITECTURE.md    # This document
-│   └── DESIGN.md          # Scope, limitations, and extension roadmap
+│   ├── DESIGN.md          # Design document index
+│   ├── engineering-design/
+│   │   └── DESIGN.md      # Ledger behavior, limitations, and roadmap
+│   └── product-design/
+│       └── DESIGN.md      # Dashboard UX, UI, and copy guidance
 ├── tests/                 # Pytest coverage for ledger/API/frontend
 └── pyproject.toml         # Poetry dependency management
 ```

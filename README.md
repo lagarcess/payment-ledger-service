@@ -88,7 +88,11 @@ operational controls.
 │   └── style.css            # Dashboard styles
 ├── docs/
 │   ├── ARCHITECTURE.md      # Accounting and architecture notes
-│   └── DESIGN.md            # Scope, limitations, and extension plan
+│   ├── DESIGN.md            # Design document index
+│   ├── engineering-design/
+│   │   └── DESIGN.md        # Ledger behavior, limits, and roadmap
+│   └── product-design/
+│       └── DESIGN.md        # Dashboard UX, UI, and copy guidance
 ├── tests/
 │   ├── test_ledger.py       # Accounting, FX, idempotency, concurrency tests
 │   ├── test_api.py          # API boundary tests
@@ -275,5 +279,7 @@ CORS_ALLOW_ORIGINS=https://example.com,http://localhost:5173
 - The concurrency controls demonstrate tradeoffs but are not a complete design
   for real payment infrastructure.
 
-See [`docs/DESIGN.md`](docs/DESIGN.md) for the detailed design notes and
-“more time” roadmap.
+See [`docs/engineering-design/DESIGN.md`](docs/engineering-design/DESIGN.md)
+for the detailed ledger design notes and “more time” roadmap. See
+[`docs/product-design/DESIGN.md`](docs/product-design/DESIGN.md) for
+dashboard UX, UI, and copy guidance.
