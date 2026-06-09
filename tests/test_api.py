@@ -86,6 +86,37 @@ def test_payment_endpoint_rejects_invalid_locking_strategy():
     assert "locking_strategy" in exc.value.detail
 
 
+@pytest.mark.parametrize(
+    ("sender_id", "receiver_id", "expected_detail"),
+    [
+        (999, 2, "Sender account 999 does not exist."),
+        (1, 999, "Receiver account 999 does not exist."),
+    ],
+)
+def test_payment_endpoint_rejects_missing_accounts(
+    sender_id,
+    receiver_id,
+    expected_detail,
+):
+    app_state.clear()
+    reset_database()
+
+    req = PaymentRequest(
+        sender_id=sender_id,
+        receiver_id=receiver_id,
+        send_amount_minor=1000,
+        fx_rate="0.92",
+        idempotency_key=f"API-MISSING-ACCOUNT-{sender_id}-{receiver_id}",
+        locking_strategy="PESSIMISTIC",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        execute_payment(req)
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == expected_detail
+
+
 def test_same_currency_api_payment_does_not_require_fx_rate():
     app_state.clear()
     reset_database()

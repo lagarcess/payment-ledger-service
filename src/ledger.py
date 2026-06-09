@@ -174,14 +174,14 @@ class LedgerEngine:
         return normalized
 
     def _normalize_decimal_input(self, value: str | Decimal, field_name: str) -> tuple[Decimal, str, str]:
-        if isinstance(value, float):
-            raise ValueError(f"{field_name} must be supplied as a string or Decimal, not float.")
+        if not isinstance(value, (str, Decimal)):
+            raise ValueError(f"{field_name} must be supplied as a string or Decimal.")
 
         if isinstance(value, Decimal):
             decimal_value = value
             raw_text = format(value, "f")
         else:
-            raw_text = str(value).strip()
+            raw_text = value.strip()
             if not raw_text:
                 raise ValueError(f"{field_name} must not be empty.")
             try:

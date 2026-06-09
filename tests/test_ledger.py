@@ -143,18 +143,19 @@ def test_cross_currency_payment_records_decimal_fx_snapshot(seeded_db):
     assert snapshot.destination_amount_minor == 926
 
 
-def test_core_fx_rate_rejects_float_inputs(seeded_db):
-    """The ledger core should not accept binary floating-point FX rates."""
+@pytest.mark.parametrize("fx_rate", [0.92, 1, True, None])
+def test_core_fx_rate_rejects_non_decimal_text_inputs(seeded_db, fx_rate):
+    """The ledger core should only accept string or Decimal FX rates."""
     ledger = seeded_db["ledger"]
     account_ids = seeded_db["account_ids"]
 
-    with pytest.raises(ValueError, match="fx_rate.*string"):
+    with pytest.raises(ValueError, match="fx_rate.*string or Decimal"):
         ledger.execute_cross_currency_payment(
             sender_id=account_ids["user1"],
             receiver_id=account_ids["user2"],
             send_amount=1000,
-            fx_rate=0.92,
-            idempotency_key="TEST-FLOAT-FX-REJECTED",
+            fx_rate=fx_rate,
+            idempotency_key=f"TEST-FX-REJECTS-{type(fx_rate).__name__}",
             fx_clearing_usd_id=account_ids["fx_usd"],
             fx_clearing_eur_id=account_ids["fx_eur"],
         )

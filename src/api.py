@@ -507,8 +507,18 @@ def execute_payment(req: PaymentRequest):
         with SessionLocal() as session:
             sender = session.get(Account, req.sender_id)
             receiver = session.get(Account, req.receiver_id)
+            if sender is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Sender account {req.sender_id} does not exist.",
+                )
+            if receiver is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Receiver account {req.receiver_id} does not exist.",
+                )
 
-        if sender is not None and receiver is not None and sender.currency == receiver.currency:
+        if sender.currency == receiver.currency:
             txn = ledger.execute_same_currency_payment(
                 sender_id=req.sender_id,
                 receiver_id=req.receiver_id,
@@ -522,8 +532,8 @@ def execute_payment(req: PaymentRequest):
                     status_code=400,
                     detail="fx_rate is required for cross-currency payments.",
                 )
-            sender_fx_id = ids.get(f"fx_{sender.currency.lower()}") if sender else ids["fx_usd"]
-            receiver_fx_id = ids.get(f"fx_{receiver.currency.lower()}") if receiver else ids["fx_eur"]
+            sender_fx_id = ids.get(f"fx_{sender.currency.lower()}")
+            receiver_fx_id = ids.get(f"fx_{receiver.currency.lower()}")
             if sender_fx_id is None or receiver_fx_id is None:
                 raise HTTPException(
                     status_code=400,
