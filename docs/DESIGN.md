@@ -26,4 +26,5 @@ technical roadmap.
 
 This project is an educational simulator. Product-facing copy should describe
 what the demo actually does and avoid unsupported claims about customers, scale,
-banking readiness, compliance, or production payment infrastructure.
+regulated financial-service readiness, compliance coverage, or production
+payment infrastructure.
